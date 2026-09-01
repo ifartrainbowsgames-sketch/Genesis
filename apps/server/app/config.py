@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     github_token: str | None = None
     github_api_url: str = "https://api.github.com"
 
+    # JSON array of explicitly trusted Streamable HTTP MCP endpoints.
+    # Example: [{"name":"local-tools","url":"http://127.0.0.1:9000/mcp","enabled":true}]
+    mcp_servers_json: str = "[]"
+
     approval_ttl_seconds: int = 600
     max_file_write_bytes: int = 1_000_000
 
