@@ -27,7 +27,13 @@ async def embed_text(text: str) -> list[float] | None:
                 embeddings = data.get("embeddings") or []
                 if embeddings:
                     vector = embeddings[0]
-                    return vector if len(vector) == settings.embedding_dim else None
+                    if len(vector) == settings.embedding_dim:
+                        return vector
+                    logger.debug(
+                        "Ollama /api/embed returned dimension %s, expected %s; trying legacy endpoint",
+                        len(vector),
+                        settings.embedding_dim,
+                    )
         except Exception:
             pass
 
