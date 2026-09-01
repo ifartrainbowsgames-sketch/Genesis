@@ -101,6 +101,10 @@ def worker_count() -> int:
     return 1 + len(_parse_workers())
 
 
+def is_external_worker(name: str) -> bool:
+    return name != "genesis-team" and name in _parse_workers()
+
+
 def _bounded_output(value: str) -> str:
     encoded = value.encode("utf-8", errors="replace")
     if len(encoded) <= settings.external_worker_max_output_bytes:
@@ -190,3 +194,25 @@ async def run_worker(request: WorkerRunRequest) -> WorkerRunResponse:
     if spec.type == "command":
         return await _run_command(spec, request)
     return await _run_http(spec, request)
+
+
+async def run_external_worker_tool(
+    worker: str,
+    prompt: str,
+    provider: str = "ollama",
+    model: str | None = None,
+    use_research: bool = False,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if worker == "genesis-team":
+        raise ValueError("The built-in Genesis team should use /v1/team/run")
+    request = WorkerRunRequest(
+        worker=worker,
+        prompt=prompt,
+        provider=provider,  # type: ignore[arg-type]
+        model=model,
+        use_research=use_research,
+        context=context or {},
+    )
+    result = await run_worker(request)
+    return result.model_dump(mode="json")
