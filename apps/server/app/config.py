@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     research_timeout_seconds: float = 20.0
     research_max_results: int = 12
 
+    # Optional fully local speech-to-text using a dedicated whisper.cpp CLI binary.
+    whisper_cpp_binary: str | None = None
+    whisper_cpp_model: str | None = None
+    voice_timeout_seconds: float = 120.0
+    voice_max_audio_bytes: int = 25_000_000
+
     approval_ttl_seconds: int = 600
     max_file_write_bytes: int = 1_000_000
 
