@@ -19,20 +19,8 @@ type Execution = { tool: string; result: Record<string, unknown> };
 function languageFor(path: string) {
   const ext = path.split(".").pop()?.toLowerCase();
   return ({
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    py: "python",
-    rs: "rust",
-    json: "json",
-    css: "css",
-    md: "markdown",
-    yml: "yaml",
-    yaml: "yaml",
-    toml: "toml",
-    sh: "shell",
-    ps1: "powershell",
+    ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript", py: "python", rs: "rust",
+    json: "json", css: "css", md: "markdown", yml: "yaml", yaml: "yaml", toml: "toml", sh: "shell", ps1: "powershell",
   } as Record<string, string>)[ext ?? ""] ?? "plaintext";
 }
 
@@ -57,6 +45,10 @@ async function approvedMutation(tool: string, arguments_: Record<string, unknown
   });
 }
 
+function settledValue<T>(result: PromiseSettledResult<T>): T | null {
+  return result.status === "fulfilled" ? result.value : null;
+}
+
 export default function WorkbenchPage() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selected, setSelected] = useState("");
@@ -78,73 +70,60 @@ export default function WorkbenchPage() {
   const refresh = useCallback(async () => {
     setError("");
     try {
-      const [fileResult, statusResult, diffResult, checkResult, taskResult, workerResult] = await Promise.all([
-        readTool("workspace.list", { path: ".", recursive: true }),
+      const fileResult = await readTool("workspace.list", { path: ".", recursive: true });
+      setFiles(((fileResult.result.items as FileItem[]) ?? []).sort((a, b) => a.path.localeCompare(b.path)));
+
+      const [statusSettled, diffSettled, checkSettled, taskSettled, workerSettled] = await Promise.allSettled([
         readTool("git.status"),
         readTool("git.diff"),
         readTool("project.detect_checks"),
         api<Task[]>("/v1/tasks?limit=20"),
         api<Worker[]>("/v1/workers"),
       ]);
-      setFiles(((fileResult.result.items as FileItem[]) ?? []).sort((a, b) => a.path.localeCompare(b.path)));
-      setGitStatus(String(statusResult.result.output ?? ""));
-      setGitDiff(String(diffResult.result.output ?? ""));
-      const nextChecks = (checkResult.result.checks as Check[]) ?? [];
+      const statusResult = settledValue(statusSettled);
+      const diffResult = settledValue(diffSettled);
+      const checkResult = settledValue(checkSettled);
+      setGitStatus(String(statusResult?.result.output ?? "Not a Git repository or Git unavailable."));
+      setGitDiff(String(diffResult?.result.output ?? ""));
+      const nextChecks = (checkResult?.result.checks as Check[] | undefined) ?? [];
       setChecks(nextChecks);
-      if (!selectedCheck && nextChecks.length) setSelectedCheck(`${nextChecks[0].kind}|${nextChecks[0].cwd}`);
-      setTasks(taskResult);
-      setWorkers(workerResult);
+      setSelectedCheck((current) => current || (nextChecks.length ? `${nextChecks[0].kind}|${nextChecks[0].cwd}` : ""));
+      setTasks(settledValue(taskSettled) ?? []);
+      setWorkers(settledValue(workerSettled) ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [selectedCheck]);
+  }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   async function openFile(path: string) {
     if (dirty && !window.confirm("Discard unsaved editor changes?")) return;
-    setBusy(true);
-    setError("");
+    setBusy(true); setError("");
     try {
       const result = await readTool("workspace.read", { path });
       const text = String(result.result.content ?? "");
-      setSelected(path);
-      setContent(text);
-      setSavedContent(text);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+      setSelected(path); setContent(text); setSavedContent(text);
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setBusy(false); }
   }
 
   async function saveFile() {
     if (!selected || !dirty) return;
-    setBusy(true);
-    setError("");
+    setBusy(true); setError("");
     try {
-      const result = await approvedMutation(
-        "workspace.write",
-        { path: selected, content, overwrite: true },
-        `Approve replacing ${selected}?`,
-      );
+      const result = await approvedMutation("workspace.write", { path: selected, content, overwrite: true }, `Approve replacing ${selected}?`);
       setSavedContent(content);
       setTerminalOutput(`Saved ${selected}\n${JSON.stringify(result.result, null, 2)}`);
       await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setBusy(false); }
   }
 
   async function runCheck() {
     if (!selectedCheck) return;
     const [kind, cwd] = selectedCheck.split("|");
-    setBusy(true);
-    setError("");
+    setBusy(true); setError("");
     try {
       const result = await approvedMutation(
         "project.run_check",
@@ -153,15 +132,12 @@ export default function WorkbenchPage() {
       );
       const check = result.result as Record<string, unknown>;
       setTerminalOutput(
-        `$ ${Array.isArray(check.command) ? check.command.join(" ") : kind}\n` +
-          `${String(check.output ?? "")}\n\nexit=${String(check.exit_code ?? "?")} passed=${String(check.passed ?? false)}`,
+        `$ ${Array.isArray(check.command) ? check.command.join(" ") : kind}\n${String(check.output ?? "")}\n\n` +
+        `exit=${String(check.exit_code ?? "?")} passed=${String(check.passed ?? false)}`,
       );
       await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -170,11 +146,7 @@ export default function WorkbenchPage() {
         <button onClick={() => void refresh()} disabled={busy}>Refresh</button>
         <button onClick={() => void saveFile()} disabled={busy || !dirty || !selected}>Save approved</button>
         <select value={selectedCheck} onChange={(event) => setSelectedCheck(event.target.value)}>
-          {checks.map((check) => (
-            <option key={`${check.kind}|${check.cwd}`} value={`${check.kind}|${check.cwd}`}>
-              {check.kind} · {check.cwd}
-            </option>
-          ))}
+          {checks.map((check) => <option key={`${check.kind}|${check.cwd}`} value={`${check.kind}|${check.cwd}`}>{check.kind} · {check.cwd}</option>)}
         </select>
         <button onClick={() => void runCheck()} disabled={busy || !selectedCheck}>Run approved check</button>
         {error ? <span className={styles.error}>{error}</span> : null}
@@ -186,55 +158,23 @@ export default function WorkbenchPage() {
           <div className={styles.panelHeader}><span>Explorer</span><span>{fileOnly.length}</span></div>
           <div className={styles.explorer}>
             {fileOnly.map((item) => (
-              <button
-                key={item.path}
-                className={`${styles.fileButton} ${selected === item.path ? styles.selected : ""}`}
-                title={item.path}
-                onClick={() => void openFile(item.path)}
-              >
-                {item.path}
-              </button>
+              <button key={item.path} className={`${styles.fileButton} ${selected === item.path ? styles.selected : ""}`} title={item.path} onClick={() => void openFile(item.path)}>{item.path}</button>
             ))}
           </div>
         </aside>
 
         <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <span>{selected || "Editor"}</span>
-            <span className={styles.editorMeta}>{selected ? languageFor(selected) : "plaintext"}</span>
-          </div>
+          <div className={styles.panelHeader}><span>{selected || "Editor"}</span><span className={styles.editorMeta}>{selected ? languageFor(selected) : "plaintext"}</span></div>
           <div className={styles.editorWrap}>
-            <Editor
-              height="100%"
-              theme="vs-dark"
-              language={languageFor(selected)}
-              value={content}
-              onChange={(value) => setContent(value ?? "")}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 13,
-                wordWrap: "off",
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-                readOnly: !selected,
-              }}
-            />
+            <Editor height="100%" theme="vs-dark" language={languageFor(selected)} value={content} onChange={(value) => setContent(value ?? "")} options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: "off", automaticLayout: true, scrollBeyondLastLine: false, readOnly: !selected }} />
           </div>
         </section>
 
         <aside className={styles.panel} style={{ borderRight: 0 }}>
           <div className={styles.panelHeader}><span>Runtime</span><span>{tasks.length} tasks</span></div>
           <div className={styles.sideContent}>
-            <div className={styles.card}>
-              <strong>Workers</strong>
-              {workers.map((worker) => <small key={worker.name}>{worker.name} · {worker.type}<br /></small>)}
-            </div>
-            {tasks.map((task) => (
-              <div className={styles.card} key={task.id}>
-                <strong>{task.title}</strong>
-                <small>{task.status}{task.stop_reason ? ` · ${task.stop_reason}` : ""}</small>
-              </div>
-            ))}
+            <div className={styles.card}><strong>Workers</strong>{workers.map((worker) => <small key={worker.name}>{worker.name} · {worker.type}<br /></small>)}</div>
+            {tasks.map((task) => <div className={styles.card} key={task.id}><strong>{task.title}</strong><small>{task.status}{task.stop_reason ? ` · ${task.stop_reason}` : ""}</small></div>)}
           </div>
         </aside>
 
@@ -244,10 +184,8 @@ export default function WorkbenchPage() {
         </section>
 
         <section className={`${styles.panel} ${styles.bottomRight}`}>
-          <div className={styles.panelHeader}><span>Git diff</span><span>{gitStatus ? "dirty/status" : ""}</span></div>
-          <div className={styles.sideContent}>
-            <pre className={styles.pre}>{gitStatus ? `${gitStatus}\n\n` : ""}{gitDiff || "No unstaged diff."}</pre>
-          </div>
+          <div className={styles.panelHeader}><span>Git diff</span><span>{gitDiff ? "changes" : ""}</span></div>
+          <div className={styles.sideContent}><pre className={styles.pre}>{gitStatus ? `${gitStatus}\n\n` : ""}{gitDiff || "No unstaged diff."}</pre></div>
         </section>
       </section>
     </main>
