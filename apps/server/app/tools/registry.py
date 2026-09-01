@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from .git_tools import diff as git_diff
 from .git_tools import status as git_status
@@ -11,11 +12,15 @@ from .github_tools import list_dir as github_list_dir
 from .github_tools import read_file as github_read_file
 from .github_tools import repo_info as github_repo_info
 from .github_tools import upsert_file as github_upsert_file
+from .mcp_tools import call_tool as mcp_call_tool
+from .mcp_tools import list_tools as mcp_list_tools
+from .mcp_tools import servers as mcp_servers
 from .project import detect_checks, run_check
 from .workspace import apply_changes, list_files, mkdir, read_file, write_file
 
 
-Tool = Callable[..., dict[str, Any]]
+ToolResult = dict[str, Any]
+Tool = Callable[..., ToolResult | Awaitable[ToolResult]]
 
 
 @dataclass(frozen=True)
@@ -39,6 +44,9 @@ TOOLS: dict[str, ToolSpec] = {
     "github.upsert_file": ToolSpec(github_upsert_file, "Create or safely replace one GitHub file", True),
     "github.create_branch": ToolSpec(github_create_branch, "Create a GitHub branch from an existing branch", True),
     "github.create_pull_request": ToolSpec(github_create_pull_request, "Open a GitHub pull request", True),
+    "mcp.servers": ToolSpec(mcp_servers, "List explicitly configured MCP servers", False),
+    "mcp.list_tools": ToolSpec(mcp_list_tools, "List tools advertised by an allowlisted MCP server", False),
+    "mcp.call_tool": ToolSpec(mcp_call_tool, "Call a tool on an allowlisted MCP server", True),
     "project.detect_checks": ToolSpec(detect_checks, "Detect supported project checks", False),
     "project.run_check": ToolSpec(run_check, "Run a restricted build/test check", True),
 }
