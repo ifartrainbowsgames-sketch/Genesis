@@ -5,6 +5,12 @@ from typing import Any, Callable
 
 from .git_tools import diff as git_diff
 from .git_tools import status as git_status
+from .github_tools import create_branch as github_create_branch
+from .github_tools import create_pull_request as github_create_pull_request
+from .github_tools import list_dir as github_list_dir
+from .github_tools import read_file as github_read_file
+from .github_tools import repo_info as github_repo_info
+from .github_tools import upsert_file as github_upsert_file
 from .project import detect_checks, run_check
 from .workspace import apply_changes, list_files, mkdir, read_file, write_file
 
@@ -27,6 +33,12 @@ TOOLS: dict[str, ToolSpec] = {
     "workspace.apply_changes": ToolSpec(apply_changes, "Apply an approved multi-file change set", True),
     "git.status": ToolSpec(git_status, "Show repository status", False),
     "git.diff": ToolSpec(git_diff, "Show repository diff", False),
+    "github.repo_info": ToolSpec(github_repo_info, "Read GitHub repository metadata", False),
+    "github.list_dir": ToolSpec(github_list_dir, "List a directory in an approved GitHub repository", False),
+    "github.read_file": ToolSpec(github_read_file, "Read a text file from an approved GitHub repository", False),
+    "github.upsert_file": ToolSpec(github_upsert_file, "Create or safely replace one GitHub file", True),
+    "github.create_branch": ToolSpec(github_create_branch, "Create a GitHub branch from an existing branch", True),
+    "github.create_pull_request": ToolSpec(github_create_pull_request, "Open a GitHub pull request", True),
     "project.detect_checks": ToolSpec(detect_checks, "Detect supported project checks", False),
     "project.run_check": ToolSpec(run_check, "Run a restricted build/test check", True),
 }
