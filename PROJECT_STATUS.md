@@ -32,7 +32,9 @@
 - [x] Approval-gated GitHub repository adapter
 - [x] GitHub branch creation and pull-request tool
 - [x] SHA-safe GitHub file update protection
-- [ ] MCP client and server registry
+- [x] MCP Python SDK v2 client
+- [x] Allowlisted Streamable HTTP MCP registry
+- [x] MCP tool discovery and approval-gated calls
 - [ ] Optional web research broker
 - [ ] Voice interface
 
