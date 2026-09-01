@@ -113,6 +113,39 @@ class ChangeSet(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class ResearchSource(BaseModel):
+    id: str
+    title: str
+    url: str
+    snippet: str = ""
+    engine: str | None = None
+    score: float | None = None
+
+
+class ResearchRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=4000)
+    provider: Provider = "ollama"
+    model: str | None = None
+    max_results: int = Field(default=8, ge=1, le=12)
+    language: str = Field(default="all", max_length=32)
+    time_range: Literal["day", "month", "year"] | None = None
+    safesearch: int = Field(default=1, ge=0, le=2)
+
+
+class ResearchReport(BaseModel):
+    query: str
+    answer: str
+    sources: list[ResearchSource] = Field(default_factory=list)
+    provider: Provider
+    model: str
+    notes: list[str] = Field(default_factory=list)
+
+
+class ResearchRunResponse(BaseModel):
+    task_id: str
+    report: ResearchReport
+
+
 class ToolProposalRequest(BaseModel):
     tool: str
     arguments: dict[str, Any] = Field(default_factory=dict)
@@ -152,12 +185,16 @@ class TeamRunRequest(BaseModel):
     task: str
     provider: Provider = "ollama"
     model: str | None = None
-    max_agent_calls: int = Field(default=3, ge=1, le=3)
+    max_agent_calls: int = Field(default=4, ge=1, le=4)
+    use_research: bool = False
+    research_query: str | None = Field(default=None, max_length=4000)
+    research_max_results: int = Field(default=8, ge=1, le=12)
 
 
 class TeamRunResponse(BaseModel):
     task_id: str
     plan: AgentPlan
+    research: ResearchReport | None = None
     changes: ChangeSet | None = None
     review: ReviewReport | None = None
     stop_reason: str
