@@ -1,6 +1,6 @@
 [package]
 name = "genesis-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Genesis local-first AI workspace"
 authors = ["Genesis"]
 edition = "2021"
@@ -14,5 +14,6 @@ tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
 tauri = { version = "2.11.5", features = [] }
+tauri-plugin-shell = "2.3.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
