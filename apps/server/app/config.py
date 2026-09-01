@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
 
+    github_token: str | None = None
+    github_api_url: str = "https://api.github.com"
+
     approval_ttl_seconds: int = 600
     max_file_write_bytes: int = 1_000_000
 
