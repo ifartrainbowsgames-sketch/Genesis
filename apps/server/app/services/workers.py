@@ -92,17 +92,13 @@ def _parse_workers() -> dict[str, WorkerSpec]:
 def list_workers() -> list[WorkerInfo]:
     result = [WorkerInfo(name="genesis-team", type="builtin", detail="Bounded Architect/Researcher/Builder/Reviewer team")]
     for worker in _parse_workers().values():
-        detail = "Fixed argv subprocess; shell disabled" if worker.type == "command" else "Allowlisted HTTP worker"
+        detail = "Fixed argv subprocess; shell disabled; approval required" if worker.type == "command" else "Allowlisted HTTP worker; approval required"
         result.append(WorkerInfo(name=worker.name, type=worker.type, detail=detail))
     return result
 
 
 def worker_count() -> int:
     return 1 + len(_parse_workers())
-
-
-def is_external_worker(name: str) -> bool:
-    return name != "genesis-team" and name in _parse_workers()
 
 
 def _bounded_output(value: str) -> str:
@@ -172,28 +168,22 @@ async def _run_http(spec: WorkerSpec, request: WorkerRunRequest) -> WorkerRunRes
 
 
 async def run_worker(request: WorkerRunRequest) -> WorkerRunResponse:
-    if request.worker == "genesis-team":
-        team = await run_team(
-            TeamRunRequest(
-                task=request.prompt,
-                provider=request.provider,
-                model=request.model,
-                use_research=request.use_research,
-            )
+    if request.worker != "genesis-team":
+        raise KeyError("External workers require the approval-gated worker.run tool")
+    team = await run_team(
+        TeamRunRequest(
+            task=request.prompt,
+            provider=request.provider,
+            model=request.model,
+            use_research=request.use_research,
         )
-        return WorkerRunResponse(
-            worker="genesis-team",
-            output=json.dumps(team.model_dump(mode="json"), ensure_ascii=False),
-            task_id=team.task_id,
-            metadata={"type": "builtin", "status": team.status},
-        )
-
-    spec = _parse_workers().get(request.worker)
-    if not spec:
-        raise KeyError(f"Unknown worker: {request.worker}")
-    if spec.type == "command":
-        return await _run_command(spec, request)
-    return await _run_http(spec, request)
+    )
+    return WorkerRunResponse(
+        worker="genesis-team",
+        output=json.dumps(team.model_dump(mode="json"), ensure_ascii=False),
+        task_id=team.task_id,
+        metadata={"type": "builtin", "status": team.status},
+    )
 
 
 async def run_external_worker_tool(
@@ -206,6 +196,9 @@ async def run_external_worker_tool(
 ) -> dict[str, Any]:
     if worker == "genesis-team":
         raise ValueError("The built-in Genesis team should use /v1/team/run")
+    spec = _parse_workers().get(worker)
+    if not spec:
+        raise KeyError(f"Unknown worker: {worker}")
     request = WorkerRunRequest(
         worker=worker,
         prompt=prompt,
@@ -214,5 +207,5 @@ async def run_external_worker_tool(
         use_research=use_research,
         context=context or {},
     )
-    result = await run_worker(request)
+    result = await (_run_command(spec, request) if spec.type == "command" else _run_http(spec, request))
     return result.model_dump(mode="json")
