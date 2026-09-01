@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ..services.workers import run_external_worker_tool
 from .git_tools import diff as git_diff
 from .git_tools import status as git_status
 from .github_tools import create_branch as github_create_branch
@@ -49,6 +50,7 @@ TOOLS: dict[str, ToolSpec] = {
     "mcp.call_tool": ToolSpec(mcp_call_tool, "Call a tool on an allowlisted MCP server", True),
     "project.detect_checks": ToolSpec(detect_checks, "Detect supported project checks", False),
     "project.run_check": ToolSpec(run_check, "Run a restricted build/test check", True),
+    "worker.run": ToolSpec(run_external_worker_tool, "Run an explicitly allowlisted external worker", True),
 }
 
 
