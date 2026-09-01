@@ -1,0 +1,27 @@
+.connectionsShell { max-width: 1880px; }
+.textLink { color: var(--accent); text-decoration: none; text-transform: uppercase; letter-spacing: .08em; font-size: 11px; }
+.textLink:hover { text-decoration: underline; }
+.connectionsGrid { display: grid; grid-template-columns: minmax(360px, .8fr) minmax(520px, 1.2fr) minmax(320px, .7fr); gap: 16px; align-items: start; }
+.connectionPanel { min-width: 0; }
+.connectionBody { padding: 14px; display: grid; gap: 11px; }
+.mutedCopy { color: var(--muted); font-size: 11px; line-height: 1.55; margin: 0; }
+.mutedCopy code { color: var(--text); }
+.twoCol { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; align-items: end; }
+.schemaBox { border: 1px solid var(--line); background: #070a0d; padding: 10px; min-width: 0; }
+.schemaBox b { color: var(--accent); text-transform: uppercase; font-size: 10px; }
+.schemaBox pre { color: var(--muted); margin: 8px 0 0; max-height: 240px; overflow: auto; white-space: pre-wrap; font-size: 10px; }
+.shaLine { color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
+.connectionDivider { height: 1px; background: var(--line); margin: 4px 0; }
+.outputPanel { position: sticky; top: 14px; }
+.connectionOutput { margin: 0; padding: 14px; min-height: 520px; max-height: calc(100vh - 180px); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #b8c5cc; font-size: 10px; line-height: 1.5; }
+
+@media (max-width: 1320px) {
+  .connectionsGrid { grid-template-columns: minmax(340px, .85fr) minmax(480px, 1.15fr); }
+  .outputPanel { position: static; grid-column: 1 / -1; }
+  .connectionOutput { min-height: 260px; max-height: 420px; }
+}
+
+@media (max-width: 840px) {
+  .connectionsGrid, .twoCol { grid-template-columns: 1fr; }
+  .outputPanel { grid-column: auto; }
+}
