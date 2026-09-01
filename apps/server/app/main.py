@@ -20,6 +20,8 @@ from .schemas import (
     MemoryDeleteResponse,
     MemoryHit,
     MemorySearchRequest,
+    ResearchRequest,
+    ResearchRunResponse,
     TaskSummary,
     TeamRunRequest,
     TeamRunResponse,
@@ -36,7 +38,8 @@ from .services.approvals import approvals
 from .services.builder import make_changes
 from .services.llm_router import LLMError, router
 from .services.memory import clear_memory, delete_memory, recent_memory, remember, search_memory
-from .services.task_ledger import list_tasks
+from .services.researcher import research
+from .services.task_ledger import add_artifact, create_task, finish_task, list_tasks
 from .services.team import run_team
 from .services.workspace_manager import workspace_manager
 from .tools.registry import TOOLS, validate_tool
@@ -48,7 +51,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.4.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.5.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin, "http://127.0.0.1:3000"],
@@ -186,6 +189,19 @@ async def memory_delete(memory_id: str) -> MemoryDeleteResponse:
 async def memory_clear(conversation_id: str | None = Query(default=None)) -> MemoryClearResponse:
     deleted = await clear_memory(conversation_id)
     return MemoryClearResponse(deleted=deleted, conversation_id=conversation_id)
+
+
+@app.post("/v1/research", response_model=ResearchRunResponse)
+async def research_run(request: ResearchRequest) -> ResearchRunResponse:
+    task_id = await create_task(f"Research: {request.query}", request.provider, request.model)
+    try:
+        report = await research(request)
+        await add_artifact(task_id, "researcher_report", report.model_dump())
+        await finish_task(task_id, "researched", f"Source-tracked research completed with {len(report.sources)} source(s)")
+        return ResearchRunResponse(task_id=task_id, report=report)
+    except Exception as exc:
+        await finish_task(task_id, "failed", f"Research failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"Research failed: {exc}") from exc
 
 
 @app.get("/v1/tasks", response_model=list[TaskSummary])
