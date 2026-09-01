@@ -35,14 +35,22 @@
 - [x] MCP Python SDK v2 client
 - [x] Allowlisted Streamable HTTP MCP registry
 - [x] MCP tool discovery and approval-gated calls
-- [ ] Optional web research broker
+- [x] Source-tracked SearXNG research broker
+- [x] Bundled local SearXNG Docker service
+- [x] Research workspace with inspectable source ledger
 - [ ] Voice interface
+- [ ] Signed desktop sidecar packaging
 
 ## Phase 4 — team mode: CORE DONE
 
 - [x] Shared task ledger
 - [x] Architect / Builder / Reviewer roles
-- [ ] Researcher role
+- [x] Researcher role
+- [x] Optional Researcher → Builder source-tracked handoff
 - [x] Artifact-based handoffs
-- [x] Stop conditions and agent-call budget controls
+- [x] Stop conditions and 1–4 agent-call budget controls
 - [x] Human approval remains mandatory before applying generated changes
+
+## Next milestone
+
+Build the local-first voice path and package FastAPI as a Tauri sidecar so Genesis can run as one desktop application without manually starting the backend.
