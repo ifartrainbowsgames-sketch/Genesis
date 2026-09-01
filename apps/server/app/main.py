@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import inspect
 import json
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
