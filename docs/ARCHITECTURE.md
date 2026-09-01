@@ -56,16 +56,18 @@ Add explicit adapters instead of unrestricted network or shell access:
 - optional web research broker with source tracking
 - voice input/output
 
-## Phase 4: multi-agent team
+## Bounded multi-agent team
 
-Use a shared task ledger instead of letting agents endlessly talk to each other. Suggested roles:
+Genesis now has a bounded team workflow backed by a task ledger:
 
-- Architect: converts goals into specifications and constraints.
-- Builder: creates patches.
-- Reviewer: checks diffs/tests and raises concrete issues.
-- Researcher: gathers external information only when needed.
+1. **Architect** converts the goal into a structured plan.
+2. **Builder** produces an exact proposed multi-file change set.
+3. **Reviewer** returns an approve/changes-requested verdict with concrete issues.
+4. Every role writes an artifact to the task ledger.
+5. The run stops after the configured 1–3 agent-call budget; there is no recursive agent conversation.
+6. Even an approved Reviewer result still stops at `awaiting_approval`. A human must approve before files are applied.
 
-Every agent writes artifacts to the ledger. Agents do not recursively chat for its own sake. Stop conditions and budgets are explicit.
+`POST /v1/team/run` executes this single bounded pass. `GET /v1/tasks` exposes recent task-ledger entries. The Researcher role remains a later integration so outside information is fetched only through explicit, source-tracked adapters.
 
 ## Memory model target
 
