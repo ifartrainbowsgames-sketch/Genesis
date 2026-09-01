@@ -34,9 +34,11 @@
 - [ ] Optional web research broker
 - [ ] Voice interface
 
-## Phase 4 — team mode
+## Phase 4 — team mode: CORE DONE
 
-- [ ] Shared task ledger
-- [ ] Architect / Builder / Reviewer / Researcher roles
-- [ ] Artifact-based handoffs
-- [ ] Stop conditions and budget controls
+- [x] Shared task ledger
+- [x] Architect / Builder / Reviewer roles
+- [ ] Researcher role
+- [x] Artifact-based handoffs
+- [x] Stop conditions and agent-call budget controls
+- [x] Human approval remains mandatory before applying generated changes
