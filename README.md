@@ -13,6 +13,7 @@ This starter intentionally **does not self-deploy, self-copy, or execute unrestr
 - PostgreSQL + pgvector conversation memory with inspect/search/delete UI
 - Streaming chat for local and optional cloud providers
 - Agent task planner
+- Bounded Architect → Builder → Reviewer team with a persistent task ledger
 - Approval-gated workspace tools: list/read/write/mkdir/apply changes
 - In-app repository selector limited to configured folders
 - Git status/diff and restricted build/test runner
@@ -109,6 +110,8 @@ See `docs/ARCHITECTURE.md` for the next build phases.
 
 ## Current workstation features
 
+- bounded Architect → Builder → Reviewer workflow with 1–3 call budget
+- persistent task ledger and reviewer findings
 - streaming responses
 - repository selection inside configured roots
 - Git status/diff
@@ -121,7 +124,7 @@ See `docs/ARCHITECTURE.md` for the next build phases.
 
 1. GitHub adapter inside Genesis
 2. MCP client/server registry
-3. Shared task ledger and Architect/Builder/Reviewer workflow
+3. Researcher role with source-tracked research broker
 4. Desktop sidecar packaging
 5. Voice input/output
 
