@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import inspect
 import json
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -29,6 +29,7 @@ from .schemas import (
     ToolExecuteResponse,
     ToolProposalRequest,
     ToolProposalResponse,
+    VoiceTranscription,
     WorkspaceInfo,
     WorkspaceListResponse,
     WorkspaceSelectRequest,
@@ -41,6 +42,7 @@ from .services.memory import clear_memory, delete_memory, recent_memory, remembe
 from .services.researcher import research
 from .services.task_ledger import add_artifact, create_task, finish_task, list_tasks
 from .services.team import run_team
+from .services.voice import transcribe_wav
 from .services.workspace_manager import workspace_manager
 from .tools.registry import TOOLS, validate_tool
 
@@ -51,7 +53,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.5.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.6.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin, "http://127.0.0.1:3000"],
@@ -100,7 +102,15 @@ async def models() -> dict:
             "ollama": {"default_model": settings.ollama_chat_model, "configured": True},
             "openai": {"default_model": settings.openai_model, "configured": bool(settings.openai_api_key)},
             "anthropic": {"default_model": settings.anthropic_model, "configured": bool(settings.anthropic_api_key)},
-        }
+        },
+        "voice": {
+            "configured": bool(settings.whisper_cpp_binary and settings.whisper_cpp_model),
+            "engine": "whisper.cpp",
+        },
+        "research": {
+            "configured": bool(settings.searxng_url),
+            "engine": "searxng",
+        },
     }
 
 
@@ -161,6 +171,18 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "X-Genesis-Model": model},
     )
+
+
+@app.post("/v1/voice/transcribe", response_model=VoiceTranscription)
+async def voice_transcribe(request: Request, language: str = Query(default="auto", max_length=16)) -> VoiceTranscription:
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type not in {"audio/wav", "audio/wave", "audio/x-wav", "application/octet-stream"}:
+        raise HTTPException(status_code=415, detail="Voice endpoint accepts PCM WAV audio")
+    audio = await request.body()
+    try:
+        return await transcribe_wav(audio, language)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/v1/memory", response_model=list[MemoryHit])
