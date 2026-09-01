@@ -133,3 +133,44 @@ class ToolExecuteRequest(BaseModel):
 class ToolExecuteResponse(BaseModel):
     tool: str
     result: Any
+
+
+class ReviewIssue(BaseModel):
+    severity: Literal["info", "warning", "blocking"] = "warning"
+    file: str | None = None
+    message: str
+
+
+class ReviewReport(BaseModel):
+    verdict: Literal["approve", "changes_requested"]
+    summary: str
+    issues: list[ReviewIssue] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class TeamRunRequest(BaseModel):
+    task: str
+    provider: Provider = "ollama"
+    model: str | None = None
+    max_agent_calls: int = Field(default=3, ge=1, le=3)
+
+
+class TeamRunResponse(BaseModel):
+    task_id: str
+    plan: AgentPlan
+    changes: ChangeSet | None = None
+    review: ReviewReport | None = None
+    stop_reason: str
+    status: str
+
+
+class TaskSummary(BaseModel):
+    id: str
+    title: str
+    status: str
+    provider: str
+    model: str | None = None
+    workspace: str
+    stop_reason: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
