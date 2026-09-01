@@ -13,6 +13,22 @@ concurrency:
 jobs:
   server:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+asyncpg://genesis:genesis@127.0.0.1:5432/genesis
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: genesis
+          POSTGRES_PASSWORD: genesis
+          POSTGRES_DB: genesis
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U genesis -d genesis"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -25,6 +41,9 @@ jobs:
       - name: Smoke-test MCP imports
         run: |
           python -c "from apps.server.app.tools.mcp_tools import servers; assert servers() == {'servers': []}"
+      - name: Smoke-test runtime imports
+        run: |
+          python -c "from apps.server.app.services.scheduler import scheduler_state; from apps.server.app.services.workers import list_workers; from apps.server.app.services.evolution import score_output; assert scheduler_state and list_workers and score_output"
       - name: Smoke-test Researcher and voice imports
         run: |
           python -c "from apps.server.app.services.researcher import research; from apps.server.app.services.voice import transcribe_wav; assert research and transcribe_wav"
