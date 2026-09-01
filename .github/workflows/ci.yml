@@ -17,6 +17,9 @@ jobs:
       - name: Smoke-test MCP imports
         run: |
           python -c "from apps.server.app.tools.mcp_tools import servers; assert servers() == {'servers': []}"
+      - name: Smoke-test Researcher and voice imports
+        run: |
+          python -c "from apps.server.app.services.researcher import research; from apps.server.app.services.voice import transcribe_wav; assert research and transcribe_wav"
 
   web:
     runs-on: ubuntu-latest
@@ -29,3 +32,18 @@ jobs:
         run: npm install
       - working-directory: apps/web
         run: npm run build
+
+  desktop-sidecar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pip install -r apps/server/requirements-build.txt
+      - name: Build packaged FastAPI sidecar
+        shell: pwsh
+        run: ./scripts/build-sidecar.ps1 -SkipInstall
+      - name: Compile-check Tauri desktop shell
+        run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
