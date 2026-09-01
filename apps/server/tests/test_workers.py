@@ -35,7 +35,17 @@ def test_http_worker_rejects_non_http_url(monkeypatch: pytest.MonkeyPatch) -> No
         workers.list_workers()
 
 
-def test_command_worker_uses_exec_not_shell(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+def test_direct_external_worker_run_is_blocked(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        workers.settings,
+        "external_workers_json",
+        '[{"name":"echo-worker","type":"command","argv":["fixed-tool"],"enabled":true}]',
+    )
+    with pytest.raises(KeyError, match="approval-gated"):
+        asyncio.run(workers.run_worker(WorkerRunRequest(worker="echo-worker", prompt="hello")))
+
+
+def test_approved_command_worker_adapter_uses_exec_not_shell(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setattr(workers.workspace_manager, "_path", tmp_path)
     monkeypatch.setattr(
         workers.settings,
@@ -64,6 +74,6 @@ def test_command_worker_uses_exec_not_shell(monkeypatch: pytest.MonkeyPatch, tmp
         return FakeProcess()
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
-    result = asyncio.run(workers.run_worker(WorkerRunRequest(worker="echo-worker", prompt="hello")))
+    result = asyncio.run(workers.run_external_worker_tool(worker="echo-worker", prompt="hello"))
     assert calls == [("fixed-tool", "--mode", "safe")]
-    assert result.output == "ok"
+    assert result["output"] == "ok"
