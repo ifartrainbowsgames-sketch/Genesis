@@ -1,0 +1,28 @@
+.globalNav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(9, 12, 15, .96);
+  backdrop-filter: blur(14px);
+}
+
+.globalNav a {
+  color: var(--muted);
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 10px;
+  border: 1px solid transparent;
+  padding: 7px 10px;
+}
+
+.globalNav a:hover {
+  color: var(--accent);
+  border-color: var(--line);
+  background: #0d1216;
+}
