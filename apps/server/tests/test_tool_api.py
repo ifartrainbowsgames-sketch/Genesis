@@ -6,24 +6,36 @@ import pytest
 from fastapi import HTTPException
 
 from apps.server.app import main
-from apps.server.app.schemas import ToolExecuteRequest, ToolProposalRequest
+from apps.server.app.schemas import ToolExecuteRequest, ToolProposalRequest, ToolReadRequest
 from apps.server.app.services.approvals import ApprovalStore
 from apps.server.app.tools.registry import ToolSpec
 
 
 def test_execute_requires_explicit_approval() -> None:
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            main.execute_tool(ToolExecuteRequest(approval_id="unused", approved=False))
-        )
+        asyncio.run(main.execute_tool(ToolExecuteRequest(approval_id="unused", approved=False)))
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Explicit approval is required"
 
 
-def test_proposal_and_execution_use_stored_tool_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_read_endpoint_allows_non_mutating_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    def read_only(value: str) -> dict[str, str]:
+        return {"value": value}
+
+    monkeypatch.setattr(main, "validate_tool", lambda _: ToolSpec(read_only, "read", False))
+    result = asyncio.run(main.read_tool(ToolReadRequest(tool="test.read", arguments={"value": "ok"})))
+    assert result.result == {"value": "ok"}
+
+
+def test_read_endpoint_rejects_mutating_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(main, "validate_tool", lambda _: ToolSpec(lambda: {"bad": True}, "write", True))
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(main.read_tool(ToolReadRequest(tool="test.write", arguments={})))
+    assert exc_info.value.status_code == 403
+
+
+def test_proposal_and_execution_use_stored_tool_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
     store = ApprovalStore()
     calls: list[str] = []
 
@@ -39,27 +51,15 @@ def test_proposal_and_execution_use_stored_tool_arguments(
     monkeypatch.setattr(main, "approvals", store)
     monkeypatch.setattr(main, "validate_tool", validate)
 
-    proposal = asyncio.run(
-        main.propose_tool(
-            ToolProposalRequest(tool="test.echo", arguments={"value": "approved-value"})
-        )
-    )
-    result = asyncio.run(
-        main.execute_tool(
-            ToolExecuteRequest(approval_id=proposal.approval_id, approved=True)
-        )
-    )
+    proposal = asyncio.run(main.propose_tool(ToolProposalRequest(tool="test.echo", arguments={"value": "approved-value"})))
+    result = asyncio.run(main.execute_tool(ToolExecuteRequest(approval_id=proposal.approval_id, approved=True)))
 
     assert result.tool == "test.echo"
     assert result.result == {"echo": "approved-value"}
     assert calls == ["approved-value"]
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(
-            main.execute_tool(
-                ToolExecuteRequest(approval_id=proposal.approval_id, approved=True)
-            )
-        )
+        asyncio.run(main.execute_tool(ToolExecuteRequest(approval_id=proposal.approval_id, approved=True)))
     assert exc_info.value.status_code == 404
 
 
