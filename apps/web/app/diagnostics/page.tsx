@@ -10,10 +10,15 @@ type ComponentHealth = {
   detail: string;
   models?: number;
   servers?: number;
+  workers?: number;
+  external?: number;
+  running?: boolean;
+  enabled?: boolean;
 };
 type Health = {
   status: string;
   components: Record<string, ComponentHealth>;
+  recommendations?: string[];
 };
 
 const LABELS: Record<string, string> = {
@@ -23,6 +28,10 @@ const LABELS: Record<string, string> = {
   voice: "whisper.cpp voice",
   github: "GitHub",
   mcp: "MCP registry",
+  workers: "Worker registry",
+  scheduler: "Durable scheduler",
+  cognitive_memory: "Cognitive memory",
+  evolution: "Shadow evolution",
 };
 
 export default function DiagnosticsPage() {
@@ -43,15 +52,13 @@ export default function DiagnosticsPage() {
     }
   }
 
-  useEffect(() => {
-    void refresh();
-  }, []);
+  useEffect(() => { void refresh(); }, []);
 
   return (
     <main className="shell">
       <header className="topbar">
         <div>
-          <div className="eyebrow">GENESIS / LOCAL DEPENDENCIES</div>
+          <div className="eyebrow">GENESIS / DOCTOR</div>
           <h1>Diagnostics</h1>
         </div>
         <div className="status"><span />{busy ? "checking" : health?.status ?? "loading"}</div>
@@ -62,7 +69,7 @@ export default function DiagnosticsPage() {
       <section className={`panel ${styles.summary}`}>
         <div>
           <h2>{health ? `System ${health.status}` : "Checking local services…"}</h2>
-          <p>Diagnostics do not expose API keys or secret values.</p>
+          <p>Diagnostics report capabilities and recovery hints without exposing API keys or secret values.</p>
         </div>
         <button disabled={busy} onClick={refresh}>{busy ? "Checking…" : "Refresh"}</button>
       </section>
@@ -79,8 +86,16 @@ export default function DiagnosticsPage() {
         ))}
       </div>
 
+      {health?.recommendations?.length ? (
+        <section className={`panel ${styles.note}`}>
+          <strong>Recovery hints</strong>
+          <ul>{health.recommendations.map((item) => <li key={item}>{item}</li>)}</ul>
+          <p>For local prerequisite checks on Windows, run <code>./scripts/doctor.ps1</code> from the repository root.</p>
+        </section>
+      ) : null}
+
       <section className={`panel ${styles.note}`}>
-        PostgreSQL and Ollama are treated as the core local services. Research, voice, GitHub, and MCP can remain intentionally unconfigured. Use this screen before a desktop build to see which capabilities will be available at runtime.
+        PostgreSQL and Ollama are the core local services. Research, voice, GitHub, MCP, and external workers can remain intentionally unconfigured. The scheduler, cognitive memory, and evolution layers are local runtime capabilities; evolved prompts remain shadow-only until a human promotion gate succeeds.
       </section>
     </main>
   );
