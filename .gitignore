@@ -5,6 +5,9 @@ __pycache__/
 node_modules/
 .next/
 dist/
+build/
 .DS_Store
 workspace/*
 !workspace/.gitkeep
+apps/desktop/src-tauri/binaries/*
+!apps/desktop/src-tauri/binaries/.gitkeep
