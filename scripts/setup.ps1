@@ -23,11 +23,14 @@ npm install
 Pop-Location
 
 if (Get-Command cargo -ErrorAction SilentlyContinue) {
-  Write-Host "Rust detected. Desktop shell can be built with: npm run desktop:dev"
+  Write-Host "Rust detected."
+  Write-Host "Desktop dev with packaged API sidecar: npm run desktop:dev:windows"
+  Write-Host "Desktop installer build: npm run desktop:build:windows"
 } else {
-  Write-Host "Rust not detected. Web/API will work; install Rust before building the Tauri desktop shell."
+  Write-Host "Rust not detected. Web/API will work; install Rust before building the Tauri desktop app."
 }
 
 Write-Host "Setup complete."
-Write-Host "Next: docker compose up -d postgres"
-Write-Host "Then: ./scripts/start.ps1"
+Write-Host "Start local data + research services: docker compose up -d postgres searxng"
+Write-Host "Then start the web workstation: ./scripts/start.ps1"
+Write-Host "Optional local voice: set WHISPER_CPP_BINARY and WHISPER_CPP_MODEL in .env"
