@@ -146,6 +146,13 @@ class ResearchRunResponse(BaseModel):
     report: ResearchReport
 
 
+class VoiceTranscription(BaseModel):
+    text: str
+    engine: str
+    model: str
+    language: str
+
+
 class ToolProposalRequest(BaseModel):
     tool: str
     arguments: dict[str, Any] = Field(default_factory=dict)
