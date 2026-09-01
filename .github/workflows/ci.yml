@@ -14,6 +14,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r apps/server/requirements.txt
       - run: python -m compileall apps/server/app
+      - run: python -c "from apps.server.app.tools.mcp_tools import servers; assert servers() == {'servers': []}"
 
   web:
     runs-on: ubuntu-latest
