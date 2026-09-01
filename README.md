@@ -1,159 +1,193 @@
 # Genesis
 
-Genesis is a **local-first personal AI workspace**. It gives you one interface for local models and optional cloud models, searchable long-term memory, bounded AI coding roles, and approval-gated tools.
+Genesis is a **local-first personal AI workstation** for chat, coding, research, voice, memory, and explicit tool integrations. Local Ollama models are the default; OpenAI and Anthropic remain optional adapters.
 
-Genesis intentionally **does not self-deploy, self-copy, or execute unrestricted shell commands**. Agents can propose actions, but file-changing and external tool actions are bounded and remain under user control.
+Genesis intentionally **does not self-deploy, self-copy, or expose unrestricted shell execution**. Coding changes, GitHub writes, and MCP calls remain bounded, inspectable, and user-controlled.
 
 ## What works now
 
 - FastAPI backend
-- Next.js 16.3.3 + React 19.2.7 web UI
-- Ollama chat support
-- Optional OpenAI Responses API and Anthropic Messages API adapters
-- PostgreSQL + pgvector conversation memory with inspect/search/delete UI
-- Streaming chat for local and optional cloud providers
-- Bounded Architect → Builder → Reviewer team with a persistent task ledger
-- Approval-gated workspace tools: list/read/write/mkdir/apply changes
-- In-app repository selector limited to configured folders
-- Git status/diff and restricted build/test runner
-- Approval-gated GitHub repository/file/branch/pull-request tools
-- MCP Python SDK v2 client using allowlisted Streamable HTTP servers
-- MCP tool discovery and approval-gated tool calls
-- Connections control center at `/connections`
-- Tauri 2 desktop shell scaffold
-- Windows PowerShell bootstrap scripts
-- Docker Compose for PostgreSQL + pgvector
+- Next.js 16.3.3 + React 19.2.7 workstation UI
+- Ollama chat plus optional OpenAI Responses API and Anthropic Messages API adapters
+- PostgreSQL + pgvector memory with inspect/search/delete controls
+- Streaming chat
+- Bounded Architect → optional Researcher → Builder → Reviewer workflow
+- Persistent task ledger and artifact handoffs
+- Exact multi-file proposal preview before apply
+- Approval-gated workspace tools, Git operations, GitHub operations, and MCP calls
+- Repository selector restricted to configured local roots
+- Restricted project build/test runner
+- GitHub repository/file/branch/pull-request adapter with SHA-safe replacement
+- MCP Python SDK v2 client with an allowlisted Streamable HTTP registry
+- Source-tracked Researcher backed by a local SearXNG broker
+- Local push-to-talk speech-to-text through a configured whisper.cpp executable/model
+- Optional operating-system speech synthesis for spoken replies
+- Tauri 2 desktop shell with a PyInstaller-packaged FastAPI sidecar build path
+- Windows setup and build scripts
 
-## 1. Prerequisites
+## 1. Windows prerequisites
 
-Recommended on Windows:
+Recommended:
 
 - Python 3.11+
 - Node.js 22+
-- Docker Desktop (for PostgreSQL)
-- Rust toolchain only if you want the Tauri desktop app
-- Ollama installed natively for best GPU access
+- Docker Desktop
+- Ollama
+- Rust stable when building the desktop application
+- whisper.cpp only if you want local speech-to-text
 
-Pull two local models after installing Ollama:
+Pull the default local models:
 
 ```powershell
 ollama pull qwen3:8b
 ollama pull nomic-embed-text
 ```
 
-## 2. Quick start on Windows
+## 2. First setup
 
 ```powershell
 Copy-Item .env.example .env
 ./scripts/setup.ps1
-docker compose up -d postgres
+docker compose up -d postgres searxng
 ./scripts/start.ps1
 ```
 
-Then open:
+Open:
 
 - Workstation: http://localhost:3000
+- Researcher: http://localhost:3000/research
+- Voice: http://localhost:3000/voice
 - Connections: http://localhost:3000/connections
 - API docs: http://localhost:8000/docs
 
-## 3. Point Genesis at an existing code repository
+SearXNG is local by default on `http://127.0.0.1:8080`. Its JSON search output is used as a source broker; the Researcher receives result titles, URLs, and snippets and produces a synthesis with source IDs such as `[S1]`.
 
-By default, Genesis can only touch `./workspace`. On Windows you can point it at a repository you own:
+## 3. Use an existing local repository
+
+Genesis touches only the selected workspace. Point it at a repository you own:
 
 ```powershell
 ./scripts/use-workspace.ps1 -Path "C:/Code/my-project"
 ```
 
-The script also sets `WORKSPACE_ALLOWED_ROOTS` to the repository parent, so the in-app selector can switch between sibling repositories. Every local file, Git, and restricted build tool resolves against the selected root and rejects path traversal.
+The script updates `WORKSPACE_ROOT` and adds the repository parent to `WORKSPACE_ALLOWED_ROOTS`, allowing the in-app repository picker to switch only within configured roots. Local file, Git, Builder-context, and restricted project-check paths are resolved against that selected root.
 
 ## 4. Optional cloud models
 
-Add API keys to `.env` only if you want cloud fallback:
+Add only the providers you want:
 
 ```env
 OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
 ```
 
-The UI lets you choose `ollama`, `openai`, or `anthropic` per request.
+The provider selector remains per request, so local Ollama can stay the default.
 
-## 5. GitHub connection
+## 5. Source-tracked research
 
-Create a fine-grained GitHub token with access only to the repositories and operations you want Genesis to use, then add it to `.env`:
+Start the bundled broker:
+
+```powershell
+docker compose up -d searxng
+```
+
+Default `.env` values:
+
+```env
+SEARXNG_URL=http://127.0.0.1:8080
+RESEARCH_TIMEOUT_SECONDS=20
+RESEARCH_MAX_RESULTS=12
+```
+
+The standalone `/research` workspace stores each completed report as a task-ledger artifact. Team runs can also insert an optional Researcher step before Builder. The bounded team budget is 1–4 model calls, so enabling Researcher still cannot create recursive agent loops.
+
+## 6. Local voice
+
+Genesis does not send microphone audio to a cloud speech service by default. The browser records mono audio, converts it to 16 kHz PCM WAV, and sends it to the local FastAPI endpoint. The backend then invokes only the configured whisper.cpp CLI binary with fixed transcription arguments.
+
+Set these paths in `.env`:
+
+```env
+WHISPER_CPP_BINARY=C:/Tools/whisper.cpp/build/bin/Release/whisper-cli.exe
+WHISPER_CPP_MODEL=C:/Tools/whisper.cpp/models/ggml-base.en.bin
+```
+
+Then open `/voice`. You can inspect/edit the transcript before sending it to Genesis. Spoken assistant replies use the browser/operating system speech-synthesis voices and can be disabled.
+
+## 7. GitHub connection
+
+Use a fine-grained token restricted to repositories and permissions you actually want Genesis to use:
 
 ```env
 GITHUB_TOKEN=...
 GITHUB_API_URL=https://api.github.com
 ```
 
-Genesis can inspect repositories, list/read files, create a branch, safely create/replace a file, and open a pull request. Replacing an existing remote file requires the SHA observed during the read, so Genesis refuses a stale overwrite if the file changed in the meantime.
+The `/connections` workspace can inspect repositories, read files, create branches, create/replace files, and open pull requests. Replacing an existing remote file requires the SHA observed during the read; a stale SHA causes the update to be rejected rather than silently overwriting a newer version.
 
-## 6. MCP connections
+## 8. MCP connections
 
-Genesis uses the current MCP Python SDK v2 and only connects to explicitly configured Streamable HTTP endpoints. Configure them in `.env`:
+Genesis only connects to explicitly configured Streamable HTTP MCP endpoints:
 
 ```env
 MCP_SERVERS_JSON=[{"name":"local-tools","url":"http://127.0.0.1:9000/mcp","enabled":true}]
 ```
 
-Then open `/connections`, refresh configured servers, discover the advertised tools, inspect the input schema, enter exact JSON arguments, and approve the call. Arbitrary stdio commands are intentionally not enabled by this registry.
+In `/connections`, Genesis can list configured servers, discover advertised tool schemas, and call an advertised tool after approval. Arbitrary stdio command launch is intentionally not exposed by this registry.
 
-## 7. Architecture
+## 9. Desktop application
 
-```text
-Next.js workstation / connections UI
-                |
-                v
-           FastAPI :8000
-      /          |           \
-     v           v            v
-Model router   Memory       Tool broker
-     |           |          /    |     \
-Ollama/cloud  pgvector  workspace GitHub MCP
+The Tauri shell can package the FastAPI backend as an external sidecar. On Windows:
+
+```powershell
+npm run desktop:dev:windows
 ```
 
-See `docs/ARCHITECTURE.md` for the detailed flow.
+That command builds `genesis-server` with PyInstaller, places the target-triple binary in Tauri's sidecar directory, and launches the desktop development app.
+
+Build the desktop bundle with:
+
+```powershell
+npm run desktop:build:windows
+```
+
+The sidecar removes the need to manually start FastAPI for the packaged desktop app. PostgreSQL, Ollama, SearXNG, and whisper.cpp are still explicit local dependencies/adapters rather than being silently embedded. Installer signing and a fully self-contained dependency bootstrap are later release-hardening work.
+
+## Architecture
+
+```text
+Next.js / Tauri workstation
+      |     |      |
+      |     |      +--> Research / Voice / Connections
+      |     v
+      +--> FastAPI sidecar :8000
+              |
+      +-------+----------+-----------+-----------+
+      |                  |           |           |
+  model router         memory     tool broker  research
+      |                  |        /   |   \       |
+ Ollama/cloud         pgvector workspace GitHub MCP SearXNG
+                                      |
+                                explicit approval
+```
+
+See `docs/ARCHITECTURE.md` for the detailed flows.
 
 ## Security model
 
-- Workspace tools cannot escape the selected workspace root.
-- Writes have a size limit.
-- Tool execution uses short-lived single-use approval IDs.
-- Generated code is previewed before application.
-- Restricted build/test commands are allowlisted rather than arbitrary shell commands.
-- GitHub tokens stay server-side and can be fine-grained to selected repositories.
-- Existing GitHub files use SHA-safe replacement checks.
-- MCP endpoints must be present in `MCP_SERVERS_JSON`; arbitrary runtime URLs are rejected.
-- MCP tool calls are treated as mutating/side-effect-capable actions and require an approved tool execution.
+- Local workspace tools cannot escape the selected workspace root.
+- Writes have a configured size limit.
+- Tool executions use short-lived, single-use approval IDs.
+- Generated code is shown before application.
+- Project checks are allowlisted instead of providing a general shell.
+- GitHub credentials stay server-side and can be restricted with fine-grained tokens.
+- Existing GitHub-file updates use SHA-safe replacement.
+- MCP server destinations come only from `MCP_SERVERS_JSON`.
+- MCP calls are treated as side-effect-capable and require approval.
+- Research requests go only through the configured SearXNG broker.
+- Voice transcription invokes only the configured whisper.cpp binary/model and accepts WAV input with size limits.
 - Cloud model providers are opt-in.
 
-## Current workstation features
+## Current build direction
 
-- bounded Architect → Builder → Reviewer workflow with a 1–3 call budget
-- persistent task ledger and reviewer findings
-- streaming responses
-- repository selection inside configured roots
-- Git status/diff
-- restricted build/test checks
-- exact multi-file preview + approval
-- inspectable/searchable/deletable memory
-- activity timeline
-- GitHub + MCP Connections control center
-
-## Next build targets
-
-1. Researcher role with a source-tracked web research broker
-2. Desktop sidecar packaging for the FastAPI service
-3. Voice input/output
-4. Richer MCP authentication profiles and connection health checks
-5. Artifact memory and task-ledger drill-down
-
-## Desktop shell
-
-After the API is running and Rust is installed:
-
-```powershell
-npm run desktop:dev
-```
-
-The Tauri shell starts the Next.js dev UI automatically. The FastAPI service still runs separately; bundling it as a signed sidecar is a later phase.
+The core workstation, Researcher, voice path, GitHub/MCP integrations, and desktop sidecar path are implemented. The next release-hardening work is desktop installer signing, local dependency health/setup UX, richer MCP authentication profiles, artifact/task drill-down, and automated integration tests for research/voice services.
