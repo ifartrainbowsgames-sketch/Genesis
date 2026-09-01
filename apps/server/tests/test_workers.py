@@ -36,7 +36,7 @@ def test_http_worker_rejects_non_http_url(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_command_worker_uses_exec_not_shell(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    monkeypatch.setattr(workers.workspace_manager, "_selected", tmp_path)
+    monkeypatch.setattr(workers.workspace_manager, "_path", tmp_path)
     monkeypatch.setattr(
         workers.settings,
         "external_workers_json",
