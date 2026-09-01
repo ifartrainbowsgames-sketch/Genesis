@@ -4,103 +4,126 @@
 
 Genesis is built around these rules:
 
-1. **Local first.** Ollama is the default provider. Cloud models are optional adapters.
-2. **User-owned memory.** Conversations and embeddings live in PostgreSQL/pgvector and can be inspected or deleted.
-3. **Visible plans.** Coding agents return artifacts before anything is applied.
-4. **Approval before mutation.** File-changing and external side-effect-capable tools require an approved tool execution.
-5. **Sandbox boundaries.** Local file and build tools are restricted to the selected workspace.
-6. **Bounded repository selection.** The UI can switch repositories only inside `WORKSPACE_ALLOWED_ROOTS`.
-7. **Explicit network integrations.** GitHub and MCP are adapters with configured destinations, not general unrestricted network or shell access.
+1. **Local first.** Ollama is the default provider; cloud models are optional adapters.
+2. **User-owned memory.** Conversation and task data lives in the user's PostgreSQL/pgvector database.
+3. **Visible artifacts.** Plans, research, code proposals, reviews, and tool results are inspectable.
+4. **Approval before mutation.** Local code changes and external side-effect-capable tools require explicit user action.
+5. **Sandbox boundaries.** Local file and project-check tools are restricted to the selected workspace.
+6. **Bounded agents.** Team runs have a hard call budget and do not recursively converse.
+7. **Explicit network integrations.** GitHub, MCP, and research use configured adapters rather than unrestricted network/shell access.
+8. **Dedicated local executables.** Voice uses only a configured whisper.cpp binary/model, not a general command runner.
+
+## Process layout
+
+```text
+Next.js UI / Tauri WebView
+        |
+        v
+FastAPI :8000  <---- packaged as genesis-server sidecar for desktop
+   |
+   +--> model router -------> Ollama / optional OpenAI / Anthropic
+   +--> memory -------------> PostgreSQL + pgvector
+   +--> coding tools -------> selected local workspace
+   +--> GitHub adapter -----> configured GitHub token
+   +--> MCP registry -------> allowlisted Streamable HTTP servers
+   +--> Researcher ---------> configured SearXNG broker
+   +--> voice STT ----------> configured whisper.cpp CLI + model
+```
 
 ## Streaming chat
 
 1. UI sends `/v1/chat/stream`.
 2. API retrieves relevant memory when enabled.
-3. Router opens a provider-native streaming request.
+3. Router opens the selected provider's streaming request.
 4. API emits SSE `meta`, `delta`, and `done` events.
-5. The completed user/assistant turn is stored in PostgreSQL when available.
+5. Completed turns are stored when the database is available.
 
 ## Local repository selection
 
 1. Genesis starts with `WORKSPACE_ROOT`.
-2. `WORKSPACE_ALLOWED_ROOTS` defines folders the repository picker may browse.
-3. `/v1/workspaces` discovers Git repositories under those roots with depth and result caps.
-4. `/v1/workspaces/select` changes the active workspace for the running process.
-5. File, Git, Builder context, and restricted build tools resolve against that selected root.
+2. `WORKSPACE_ALLOWED_ROOTS` defines folders the picker may browse.
+3. `/v1/workspaces` discovers bounded candidate repositories.
+4. `/v1/workspaces/select` changes the active workspace for the process.
+5. File, Git, Builder-context, and restricted project-check paths resolve against that selected root.
 
-## Task planning and building
+## Coding and approval flow
 
-1. `/v1/agent/plan` asks the Architect for structured steps.
-2. `/v1/agent/build` asks the Builder for an exact multi-file proposal.
-3. The UI previews the full file contents.
-4. The user approves the change set.
-5. Genesis applies files atomically inside the selected workspace.
-6. Restricted checks and Git diff/status can be run afterward.
+1. Architect returns a structured plan.
+2. Optional Researcher returns a source-tracked artifact.
+3. Builder returns an exact multi-file change set.
+4. Reviewer returns an approve/changes-requested report.
+5. Genesis stops at review; nothing is automatically applied.
+6. The UI displays proposed file contents.
+7. User approval creates/consumes a short-lived single-use approval token.
+8. Files are applied inside the selected workspace, after which restricted checks and Git diff/status can run.
+
+## Bounded team
+
+`POST /v1/team/run` performs one bounded pass. The maximum budget is four model calls:
+
+```text
+Architect -> [Researcher] -> Builder -> Reviewer -> STOP
+```
+
+Research is optional, so a normal coding pass still needs only Architect → Builder → Reviewer. Every completed role writes an artifact to the task ledger. Reviewer approval means `awaiting_approval`, not automatic execution.
+
+## Researcher
+
+The Researcher has no general browser or shell. `research_broker.py` sends a query only to `SEARXNG_URL` and requests SearXNG JSON results. It accepts only HTTP(S) result URLs, deduplicates them, and returns bounded source records with stable IDs such as `S1`.
+
+`researcher.py` gives the selected model only those result titles, URLs, and snippets. The system prompt requires source IDs such as `[S1]` in source-dependent claims and records warnings if a synthesis omits citations or invents unknown IDs.
+
+`POST /v1/research` stores the report as a `researcher_report` task artifact. A team run can pass the same research artifact to Builder as supporting context.
+
+## Voice
+
+The `/voice` page records microphone samples in the browser, down-samples them to 16 kHz mono PCM, and encodes a WAV payload. `POST /v1/voice/transcribe` accepts only WAV-like content types and enforces a maximum payload size.
+
+`voice.py` resolves only `WHISPER_CPP_BINARY` and `WHISPER_CPP_MODEL`, validates both paths, writes the incoming WAV to a temporary directory, and launches whisper.cpp with a fixed transcription argument set. There is no arbitrary command parameter supplied by the browser.
+
+The transcript is returned to the UI for inspection/editing before it is sent to chat. Optional spoken replies use the browser/operating-system `speechSynthesis` implementation.
 
 ## Tool approval broker
 
-1. Client calls `/v1/tools/propose` with a registered tool and exact arguments.
+1. Client sends a registered tool name and exact arguments to `/v1/tools/propose`.
 2. Server validates the tool and returns a short-lived approval ID.
-3. A user action approves the operation.
-4. Client calls `/v1/tools/execute` with `approved: true`.
-5. Server consumes the approval exactly once.
+3. A user action approves the exact operation.
+4. Client sends the approval ID to `/v1/tools/execute` with `approved: true`.
+5. Server consumes the token exactly once.
 6. The broker supports both synchronous and asynchronous registered tools.
+
+No general shell tool is registered.
 
 ## GitHub adapter
 
-The GitHub adapter is server-side and optional. `GITHUB_TOKEN` is never sent to the web UI.
-
-Registered tools include:
-
-- `github.repo_info`
-- `github.list_dir`
-- `github.read_file`
-- `github.upsert_file`
-- `github.create_branch`
-- `github.create_pull_request`
-
-Existing-file replacement requires `expected_sha`. Genesis reads the current remote SHA immediately before the update and rejects the write if it no longer matches. This prevents a stale preview from silently overwriting a newer remote change.
+`GITHUB_TOKEN` stays in the FastAPI process. Registered operations cover repository metadata, directory/file reads, SHA-safe file create/replace, branch creation, and pull requests. Existing-file replacement requires `expected_sha`; Genesis re-reads the remote SHA immediately before update and rejects stale writes.
 
 ## MCP v2 adapter
 
-Genesis uses the MCP Python SDK v2. The registry intentionally supports **Streamable HTTP only** for now; it does not launch arbitrary stdio commands.
+The MCP registry supports explicitly configured **Streamable HTTP** servers only. `MCP_SERVERS_JSON` maps trusted names to URLs; callers choose a configured name rather than supplying an arbitrary URL.
 
-`MCP_SERVERS_JSON` contains the explicit server allowlist. A tool request supplies a configured server **name**, not an arbitrary URL. The server name is resolved by `mcp_registry.py`, which validates the configured HTTP(S) URL and rejects unknown or disabled entries.
+Genesis can list configured servers, discover advertised tools, and call an advertised tool. `mcp.call_tool` is classified as side-effect-capable and goes through the approval broker.
 
-Registered MCP tools are:
+## Desktop sidecar
 
-- `mcp.servers` — show configured endpoints
-- `mcp.list_tools` — negotiate with the selected MCP server and inspect advertised tool schemas
-- `mcp.call_tool` — re-list tools, verify the requested tool is actually advertised, then call it
+The desktop build uses Tauri `bundle.externalBin` for `genesis-server`. `scripts/build-sidecar.ps1` packages `apps/server/sidecar_entry.py` with PyInstaller and names the output with the current Rust target triple, matching Tauri's sidecar convention.
 
-`mcp.call_tool` is classified as side-effect-capable and goes through the approval broker. Genesis uses the SDK's automatic protocol-version negotiation, allowing the SDK to handle modern MCP protocol details rather than hand-rolling wire messages.
+The Rust desktop setup initializes `tauri-plugin-shell` and starts `genesis-server` when the desktop app launches. This bundles the FastAPI process with the app, but external local services remain explicit:
 
-The `/connections` UI provides the GitHub and MCP controls while keeping credentials in the FastAPI process.
+- PostgreSQL/pgvector for persistent memory/task data
+- Ollama for local language models
+- SearXNG for source-tracked web research
+- whisper.cpp for local speech-to-text when configured
 
-## Bounded multi-agent team
+Windows CI packages the Python sidecar and runs `cargo check` so Rust-side sidecar wiring is compile-tested. Installer signing and first-run dependency setup remain release-hardening work.
 
-Genesis uses a task ledger instead of unbounded agent-to-agent conversation:
+## Memory evolution
 
-1. **Architect** converts the goal into a structured plan.
-2. **Builder** produces a proposed multi-file change set.
-3. **Reviewer** returns an approve/changes-requested verdict with concrete findings.
-4. Every role writes an artifact to the task ledger.
-5. Runs stop after the configured 1–3 agent-call budget.
-6. Reviewer approval still stops at `awaiting_approval`; a human approves before local files are changed.
-
-`POST /v1/team/run` executes one bounded pass. `GET /v1/tasks` exposes recent ledger entries.
-
-## Next integration: Researcher
-
-The Researcher should not receive a general-purpose browser or shell. The planned broker will return source-tracked research artifacts from explicitly supported providers, then store the artifact in the task ledger for Architect/Builder consumption.
-
-## Memory model target
-
-The next memory split is:
+Current persistent memory is conversation memory plus task-ledger artifacts. The next split is:
 
 - working memory: current task context
 - episodic memory: prior sessions/events
 - semantic memory: stable facts/preferences/projects
-- artifact memory: files, diffs, decisions, test output, research artifacts
+- artifact memory: files, diffs, decisions, test output, research reports
 
-All persistent memory remains inspectable and deletable by the user.
+Persistent memory should remain inspectable and deletable by the user.
