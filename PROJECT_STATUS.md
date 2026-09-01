@@ -27,7 +27,7 @@
 - [x] Streaming chat for Ollama/OpenAI/Anthropic
 - [x] Inspectable/searchable/deletable memory panel
 
-## Phase 3 — integrations: IN PROGRESS
+## Phase 3 — integrations: CORE DONE
 
 - [x] Approval-gated GitHub repository adapter
 - [x] GitHub branch creation and pull-request tool
@@ -38,8 +38,9 @@
 - [x] Source-tracked SearXNG research broker
 - [x] Bundled local SearXNG Docker service
 - [x] Research workspace with inspectable source ledger
-- [ ] Voice interface
-- [ ] Signed desktop sidecar packaging
+- [x] Local-first push-to-talk voice interface
+- [x] Configured whisper.cpp speech-to-text backend
+- [x] Optional operating-system speech synthesis for replies
 
 ## Phase 4 — team mode: CORE DONE
 
@@ -51,6 +52,18 @@
 - [x] Stop conditions and 1–4 agent-call budget controls
 - [x] Human approval remains mandatory before applying generated changes
 
+## Phase 5 — desktop packaging: IN PROGRESS
+
+- [x] FastAPI PyInstaller sidecar entrypoint
+- [x] Target-triple-aware Windows sidecar build script
+- [x] Tauri externalBin configuration
+- [x] Tauri shell-plugin sidecar launch
+- [x] Windows CI job for sidecar packaging and Rust compile-check
+- [ ] Verify packaged desktop runtime against local PostgreSQL/Ollama/SearXNG
+- [ ] Installer signing
+- [ ] First-run dependency health/setup screen
+- [ ] Release artifacts and versioned installer workflow
+
 ## Next milestone
 
-Build the local-first voice path and package FastAPI as a Tauri sidecar so Genesis can run as one desktop application without manually starting the backend.
+Finish release hardening: make the desktop build reproducible in CI, verify the packaged sidecar runtime, add dependency health diagnostics, and produce a signed versioned Windows installer workflow.
