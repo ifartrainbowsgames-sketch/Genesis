@@ -27,9 +27,11 @@
 - [x] Streaming chat for Ollama/OpenAI/Anthropic
 - [x] Inspectable/searchable/deletable memory panel
 
-## Phase 3 — integrations: NEXT
+## Phase 3 — integrations: IN PROGRESS
 
-- [ ] GitHub repository adapter inside Genesis
+- [x] Approval-gated GitHub repository adapter
+- [x] GitHub branch creation and pull-request tool
+- [x] SHA-safe GitHub file update protection
 - [ ] MCP client and server registry
 - [ ] Optional web research broker
 - [ ] Voice interface
