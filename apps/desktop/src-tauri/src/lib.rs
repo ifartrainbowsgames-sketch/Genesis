@@ -1,3 +1,6 @@
+use std::fs;
+
+use tauri::Manager;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
@@ -8,7 +11,14 @@ pub fn run() {
         .setup(|app| {
             #[cfg(desktop)]
             {
-                let sidecar = app.shell().sidecar("genesis-server")?;
+                let app_data = app.path().app_local_data_dir()?;
+                let workspace = app_data.join("workspace");
+                fs::create_dir_all(&workspace)?;
+
+                let sidecar = app
+                    .shell()
+                    .sidecar("genesis-server")?
+                    .env("WORKSPACE_ROOT", workspace.as_os_str());
                 let (mut events, child) = sidecar.spawn()?;
                 tauri::async_runtime::spawn(async move {
                     let _child = child;
