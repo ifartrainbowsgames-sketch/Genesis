@@ -1,0 +1,159 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(320px, .75fr) minmax(0, 1.25fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.controls,
+.answer {
+  min-height: 560px;
+}
+
+.form {
+  padding: 15px;
+  display: grid;
+  gap: 13px;
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.threeCol {
+  display: grid;
+  grid-template-columns: .65fr .8fr 1fr;
+  gap: 10px;
+}
+
+.muted {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.empty {
+  margin: 15px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  border: 1px dashed var(--line);
+  padding: 14px;
+}
+
+.answerBody {
+  padding: 18px;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-bottom: 12px;
+}
+
+.answerBody h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.text {
+  white-space: pre-wrap;
+  line-height: 1.65;
+  color: #d7e0e5;
+}
+
+.notes {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: #d5a557;
+  font-size: 10px;
+}
+
+.sourcesPanel {
+  margin-top: 16px;
+}
+
+.sourceGrid {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.sourceCard {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: #070a0d;
+  padding: 12px;
+}
+
+.sourceHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.sourceHead b {
+  color: var(--accent);
+}
+
+.sourceCard h3 {
+  margin: 10px 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.sourceCard a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.sourceCard a:hover {
+  color: var(--accent);
+}
+
+.sourceCard p {
+  color: #b8c5cc;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.sourceCard code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #70808a;
+  font-size: 9px;
+}
+
+@media (max-width: 1080px) {
+  .grid,
+  .sourceGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .controls,
+  .answer {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .twoCol,
+  .threeCol {
+    grid-template-columns: 1fr;
+  }
+}
