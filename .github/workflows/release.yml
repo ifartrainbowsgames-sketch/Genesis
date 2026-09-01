@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Python build dependencies
+        run: pip install -r apps/server/requirements-build.txt
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm install
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npm install
+      - name: Build packaged FastAPI sidecar
+        shell: pwsh
+        run: ./scripts/build-sidecar.ps1 -SkipInstall
+      - name: Build Tauri installer
+        working-directory: apps/desktop
+        run: npm run tauri build
+      - name: Upload Windows bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-windows-${{ github.ref_name }}
+          path: apps/desktop/src-tauri/target/release/bundle/**
+          if-no-files-found: error
