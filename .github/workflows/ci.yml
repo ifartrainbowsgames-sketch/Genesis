@@ -12,8 +12,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r apps/server/requirements.txt
+      - run: pip install -r apps/server/requirements-dev.txt
       - run: python -m compileall apps/server/app
+      - name: Run server tests
+        run: python -m pytest -q apps/server/tests
       - name: Smoke-test MCP imports
         run: |
           python -c "from apps.server.app.tools.mcp_tools import servers; assert servers() == {'servers': []}"
