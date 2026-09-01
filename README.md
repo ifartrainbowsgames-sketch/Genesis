@@ -10,9 +10,12 @@ This starter intentionally **does not self-deploy, self-copy, or execute unrestr
 - Next.js 16.3.3 + React 19.2.7 web UI
 - Ollama chat support
 - Optional OpenAI Responses API and Anthropic Messages API adapters
-- PostgreSQL + pgvector conversation memory
+- PostgreSQL + pgvector conversation memory with inspect/search/delete UI
+- Streaming chat for local and optional cloud providers
 - Agent task planner
-- Approval-gated workspace tools: list/read/write/mkdir
+- Approval-gated workspace tools: list/read/write/mkdir/apply changes
+- In-app repository selector limited to configured folders
+- Git status/diff and restricted build/test runner
 - Tauri 2 desktop shell scaffold
 - Windows PowerShell bootstrap scripts
 - Docker Compose for PostgreSQL + pgvector
@@ -57,7 +60,6 @@ docker compose up -d postgres
 
 If you do not have Docker yet, install Docker Desktop or point `DATABASE_URL` to an existing PostgreSQL instance with the `vector` extension.
 
-
 ## Point Genesis at an existing code repository
 
 By default, Genesis can only touch `./workspace`. On Windows you can point it at a repository you own:
@@ -66,7 +68,7 @@ By default, Genesis can only touch `./workspace`. On Windows you can point it at
 ./scripts/use-workspace.ps1 -Path "C:/Code/my-project"
 ```
 
-The server resolves every file path against that root and rejects path traversal outside it. Restart the API after changing the workspace.
+The script also sets `WORKSPACE_ALLOWED_ROOTS` to the repository parent, so the in-app selector can switch between sibling repositories. Every tool resolves against the selected root and rejects path traversal. Restart the API after changing `.env`.
 
 ## 4. Optional cloud models
 
@@ -105,16 +107,23 @@ See `docs/ARCHITECTURE.md` for the next build phases.
 - No unrestricted shell tool is enabled in this starter.
 - Cloud providers are opt-in.
 
+## Current workstation features
+
+- streaming responses
+- repository selection inside configured roots
+- Git status/diff
+- restricted build/test checks
+- exact multi-file preview + approval
+- inspectable/searchable/deletable memory
+- activity timeline
+
 ## Next build targets
 
-1. Streaming responses
-2. Git diff/patch tools with approval UI
-3. Sandboxed command runner for tests/builds
-4. GitHub connector
-5. Desktop shell (Tauri)
-6. Voice input/output
-7. Multi-agent collaboration with a shared task ledger
-8. Inspectable memory manager
+1. GitHub adapter inside Genesis
+2. MCP client/server registry
+3. Shared task ledger and Architect/Builder/Reviewer workflow
+4. Desktop sidecar packaging
+5. Voice input/output
 
 ## Desktop shell
 

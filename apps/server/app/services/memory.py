@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from ..config import settings
 from ..db import SessionLocal
@@ -17,7 +18,6 @@ async def embed_text(text: str) -> list[float] | None:
     base = settings.ollama_base_url.rstrip("/")
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            # Current Ollama API.
             response = await client.post(
                 f"{base}/api/embed",
                 json={"model": settings.ollama_embed_model, "input": text, "dimensions": settings.embedding_dim},
@@ -32,7 +32,6 @@ async def embed_text(text: str) -> list[float] | None:
             pass
 
         try:
-            # Compatibility with older Ollama versions.
             response = await client.post(f"{base}/api/embeddings", json={"model": settings.ollama_embed_model, "prompt": text})
             if response.is_success:
                 vector = response.json().get("embedding")
@@ -40,6 +39,17 @@ async def embed_text(text: str) -> list[float] | None:
         except Exception as exc:
             logger.debug("Embedding unavailable: %s", exc)
     return None
+
+
+def _hit(row: MemoryRecord, score: float | None = None) -> MemoryHit:
+    return MemoryHit(
+        id=str(row.id),
+        conversation_id=row.conversation_id,
+        role=row.role,
+        content=row.content,
+        score=score,
+        created_at=row.created_at,
+    )
 
 
 async def remember(conversation_id: str, role: str, content: str) -> None:
@@ -50,6 +60,21 @@ async def remember(conversation_id: str, role: str, content: str) -> None:
             await session.commit()
     except Exception as exc:
         logger.warning("Memory write skipped: %s", exc)
+
+
+async def recent_memory(conversation_id: str | None = None, limit: int = 50) -> list[MemoryHit]:
+    limit = max(1, min(limit, 100))
+    try:
+        async with SessionLocal() as session:
+            stmt = select(MemoryRecord)
+            if conversation_id:
+                stmt = stmt.where(MemoryRecord.conversation_id == conversation_id)
+            stmt = stmt.order_by(MemoryRecord.created_at.desc()).limit(limit)
+            rows = (await session.execute(stmt)).scalars().all()
+            return [_hit(row) for row in rows]
+    except Exception as exc:
+        logger.warning("Memory read skipped: %s", exc)
+        return []
 
 
 async def search_memory(query: str, conversation_id: str | None = None, limit: int = 5) -> list[MemoryHit]:
@@ -64,29 +89,40 @@ async def search_memory(query: str, conversation_id: str | None = None, limit: i
                 distance = MemoryRecord.embedding.cosine_distance(vector)
                 stmt = stmt.where(MemoryRecord.embedding.is_not(None)).order_by(distance).limit(limit)
                 rows = (await session.execute(stmt)).scalars().all()
-                return [
-                    MemoryHit(
-                        id=str(row.id),
-                        conversation_id=row.conversation_id,
-                        role=row.role,
-                        content=row.content,
-                        score=None,
-                    )
-                    for row in rows
-                ]
+                return [_hit(row) for row in rows]
 
             stmt = stmt.where(MemoryRecord.content.ilike(f"%{query}%")).order_by(MemoryRecord.created_at.desc()).limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
-            return [
-                MemoryHit(
-                    id=str(row.id),
-                    conversation_id=row.conversation_id,
-                    role=row.role,
-                    content=row.content,
-                    score=None,
-                )
-                for row in rows
-            ]
+            return [_hit(row) for row in rows]
     except Exception as exc:
         logger.warning("Memory search skipped: %s", exc)
         return []
+
+
+async def delete_memory(memory_id: str) -> bool:
+    try:
+        parsed = uuid.UUID(memory_id)
+    except ValueError as exc:
+        raise ValueError("Invalid memory id") from exc
+    try:
+        async with SessionLocal() as session:
+            result = await session.execute(delete(MemoryRecord).where(MemoryRecord.id == parsed))
+            await session.commit()
+            return bool(result.rowcount)
+    except Exception as exc:
+        logger.warning("Memory delete failed: %s", exc)
+        return False
+
+
+async def clear_memory(conversation_id: str | None = None) -> int:
+    try:
+        async with SessionLocal() as session:
+            stmt = delete(MemoryRecord)
+            if conversation_id:
+                stmt = stmt.where(MemoryRecord.conversation_id == conversation_id)
+            result = await session.execute(stmt)
+            await session.commit()
+            return int(result.rowcount or 0)
+    except Exception as exc:
+        logger.warning("Memory clear failed: %s", exc)
+        return 0

@@ -3,11 +3,11 @@ from __future__ import annotations
 import subprocess
 from typing import Any
 
-from ..config import settings
+from ..services.workspace_manager import workspace_manager
 
 
 def _git(args: list[str], timeout: int = 20) -> str:
-    root = settings.workspace_path
+    root = workspace_manager.path
     result = subprocess.run(
         ["git", *args],
         cwd=root,

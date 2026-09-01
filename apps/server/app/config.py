@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     server_port: int = 8000
     web_origin: str = "http://localhost:3000"
     workspace_root: str = "./workspace"
+    workspace_allowed_roots: str = ""
 
     database_url: str = "postgresql+asyncpg://genesis:genesis@localhost:5432/genesis"
 

@@ -4,10 +4,11 @@ from pathlib import Path
 from typing import Any
 
 from ..config import settings
+from ..services.workspace_manager import workspace_manager
 
 
 def _safe_path(relative_path: str) -> Path:
-    root = settings.workspace_path
+    root = workspace_manager.path
     candidate = (root / relative_path).resolve()
     if candidate != root and root not in candidate.parents:
         raise ValueError("Path escapes workspace root")
@@ -25,7 +26,7 @@ def list_files(path: str = ".", recursive: bool = False) -> dict[str, Any]:
     items = []
     for item in iterator:
         items.append({
-            "path": str(item.relative_to(settings.workspace_path)).replace("\\", "/"),
+            "path": str(item.relative_to(workspace_manager.path)).replace("\\", "/"),
             "type": "dir" if item.is_dir() else "file",
             "size": item.stat().st_size if item.is_file() else None,
         })

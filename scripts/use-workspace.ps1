@@ -17,18 +17,24 @@ if (-not (Test-Path ".env")) {
 }
 
 $Escaped = $Resolved.Replace("\\", "/")
+$AllowedRoot = (Split-Path -Parent $Resolved).Replace("\\", "/")
 $Content = Get-Content ".env"
-$Found = $false
+$FoundWorkspace = $false
+$FoundAllowed = $false
 $Updated = foreach ($Line in $Content) {
   if ($Line -match '^WORKSPACE_ROOT=') {
-    $Found = $true
+    $FoundWorkspace = $true
     "WORKSPACE_ROOT=$Escaped"
+  } elseif ($Line -match '^WORKSPACE_ALLOWED_ROOTS=') {
+    $FoundAllowed = $true
+    "WORKSPACE_ALLOWED_ROOTS=$AllowedRoot"
   } else {
     $Line
   }
 }
-if (-not $Found) {
-  $Updated += "WORKSPACE_ROOT=$Escaped"
-}
+if (-not $FoundWorkspace) { $Updated += "WORKSPACE_ROOT=$Escaped" }
+if (-not $FoundAllowed) { $Updated += "WORKSPACE_ALLOWED_ROOTS=$AllowedRoot" }
 Set-Content ".env" $Updated
 Write-Host "Genesis workspace set to: $Resolved"
+Write-Host "Repository selector allowed root: $AllowedRoot"
+Write-Host "Restart the Genesis API if it is already running."

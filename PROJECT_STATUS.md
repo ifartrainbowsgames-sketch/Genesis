@@ -16,19 +16,20 @@
 - [x] Tauri desktop shell scaffold
 - [x] Windows setup/start scripts
 
-## Phase 2 — coding agent: NEXT
+## Phase 2 — coding workstation: DONE
 
 - [x] Git status/diff tools
 - [x] Multi-file change preview and approval
 - [x] Restricted test/build runner
-- [ ] Repository selector
+- [x] Repository selector restricted to configured roots
 - [x] Explicit change approval UI
 - [x] Tool-call activity timeline
-- [ ] Streaming output
+- [x] Streaming chat for Ollama/OpenAI/Anthropic
+- [x] Inspectable/searchable/deletable memory panel
 
-## Phase 3 — integrations
+## Phase 3 — integrations: NEXT
 
-- [ ] GitHub repo read/write
+- [ ] GitHub repository adapter inside Genesis
 - [ ] MCP client and server registry
 - [ ] Optional web research broker
 - [ ] Voice interface

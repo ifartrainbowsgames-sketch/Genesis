@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator
+
 import httpx
 
 from ..config import settings
@@ -31,12 +34,18 @@ class LLMRouter:
             return model_name, await self._anthropic(messages, model_name)
         raise LLMError(f"Unsupported provider: {provider}")
 
+    async def stream(self, provider: Provider, messages: list[ChatMessage], model: str | None = None) -> tuple[str, AsyncIterator[str]]:
+        model_name = model or self.default_model(provider)
+        if provider == "ollama":
+            return model_name, self._ollama_stream(messages, model_name)
+        if provider == "openai":
+            return model_name, self._openai_stream(messages, model_name)
+        if provider == "anthropic":
+            return model_name, self._anthropic_stream(messages, model_name)
+        raise LLMError(f"Unsupported provider: {provider}")
+
     async def _ollama(self, messages: list[ChatMessage], model: str) -> str:
-        payload = {
-            "model": model,
-            "messages": [m.model_dump() for m in messages],
-            "stream": False,
-        }
+        payload = {"model": model, "messages": [m.model_dump() for m in messages], "stream": False}
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(f"{settings.ollama_base_url.rstrip('/')}/api/chat", json=payload)
         if response.is_error:
@@ -47,17 +56,26 @@ class LLMRouter:
         except KeyError as exc:
             raise LLMError(f"Unexpected Ollama response: {data}") from exc
 
+    async def _ollama_stream(self, messages: list[ChatMessage], model: str) -> AsyncIterator[str]:
+        payload = {"model": model, "messages": [m.model_dump() for m in messages], "stream": True}
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream("POST", f"{settings.ollama_base_url.rstrip('/')}/api/chat", json=payload) as response:
+                if response.is_error:
+                    body = (await response.aread()).decode("utf-8", errors="replace")
+                    raise LLMError(f"Ollama error {response.status_code}: {body[:500]}")
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    data = json.loads(line)
+                    text = data.get("message", {}).get("content", "")
+                    if text:
+                        yield text
+
     async def _openai(self, messages: list[ChatMessage], model: str) -> str:
         if not settings.openai_api_key:
             raise LLMError("OPENAI_API_KEY is not configured")
-        headers = {
-            "Authorization": f"Bearer {settings.openai_api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": model,
-            "input": [m.model_dump() for m in messages],
-        }
+        headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
+        payload = {"model": model, "input": [m.model_dump() for m in messages]}
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post("https://api.openai.com/v1/responses", headers=headers, json=payload)
         if response.is_error:
@@ -74,25 +92,37 @@ class LLMRouter:
             raise LLMError(f"Unexpected OpenAI response: {str(data)[:800]}")
         return "".join(parts)
 
+    async def _openai_stream(self, messages: list[ChatMessage], model: str) -> AsyncIterator[str]:
+        if not settings.openai_api_key:
+            raise LLMError("OPENAI_API_KEY is not configured")
+        headers = {"Authorization": f"Bearer {settings.openai_api_key}", "Content-Type": "application/json"}
+        payload = {"model": model, "input": [m.model_dump() for m in messages], "stream": True}
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream("POST", "https://api.openai.com/v1/responses", headers=headers, json=payload) as response:
+                if response.is_error:
+                    body = (await response.aread()).decode("utf-8", errors="replace")
+                    raise LLMError(f"OpenAI error {response.status_code}: {body[:500]}")
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if not raw or raw == "[DONE]":
+                        continue
+                    event = json.loads(raw)
+                    if event.get("type") == "response.output_text.delta":
+                        delta = event.get("delta", "")
+                        if delta:
+                            yield delta
+
     async def _anthropic(self, messages: list[ChatMessage], model: str) -> str:
         if not settings.anthropic_api_key:
             raise LLMError("ANTHROPIC_API_KEY is not configured")
-
         system_parts = [m.content for m in messages if m.role == "system"]
         body_messages = [m.model_dump() for m in messages if m.role != "system"]
-        headers = {
-            "x-api-key": settings.anthropic_api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        }
-        payload = {
-            "model": model,
-            "max_tokens": 4096,
-            "messages": body_messages,
-        }
+        headers = {"x-api-key": settings.anthropic_api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+        payload: dict[str, object] = {"model": model, "max_tokens": 4096, "messages": body_messages}
         if system_parts:
             payload["system"] = "\n\n".join(system_parts)
-
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
         if response.is_error:
@@ -100,6 +130,32 @@ class LLMRouter:
         data = response.json()
         parts = [item.get("text", "") for item in data.get("content", []) if item.get("type") == "text"]
         return "".join(parts)
+
+    async def _anthropic_stream(self, messages: list[ChatMessage], model: str) -> AsyncIterator[str]:
+        if not settings.anthropic_api_key:
+            raise LLMError("ANTHROPIC_API_KEY is not configured")
+        system_parts = [m.content for m in messages if m.role == "system"]
+        body_messages = [m.model_dump() for m in messages if m.role != "system"]
+        headers = {"x-api-key": settings.anthropic_api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+        payload: dict[str, object] = {"model": model, "max_tokens": 4096, "messages": body_messages, "stream": True}
+        if system_parts:
+            payload["system"] = "\n\n".join(system_parts)
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream("POST", "https://api.anthropic.com/v1/messages", headers=headers, json=payload) as response:
+                if response.is_error:
+                    body = (await response.aread()).decode("utf-8", errors="replace")
+                    raise LLMError(f"Anthropic error {response.status_code}: {body[:500]}")
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    raw = line[5:].strip()
+                    if not raw:
+                        continue
+                    event = json.loads(raw)
+                    if event.get("type") == "content_block_delta":
+                        delta = event.get("delta", {})
+                        if delta.get("type") == "text_delta" and delta.get("text"):
+                            yield delta["text"]
 
 
 router = LLMRouter()

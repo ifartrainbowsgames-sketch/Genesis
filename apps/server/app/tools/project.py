@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from ..config import settings
+from ..services.workspace_manager import workspace_manager
 
 
 CHECKS: dict[str, tuple[list[str], str | None]] = {
@@ -18,7 +18,7 @@ CHECKS: dict[str, tuple[list[str], str | None]] = {
 
 
 def _safe_cwd(relative_cwd: str) -> Path:
-    root = settings.workspace_path
+    root = workspace_manager.path
     cwd = (root / relative_cwd).resolve()
     if cwd != root and root not in cwd.parents:
         raise ValueError("Working directory escapes workspace root")
@@ -28,7 +28,7 @@ def _safe_cwd(relative_cwd: str) -> Path:
 
 
 def detect_checks() -> dict[str, Any]:
-    root = settings.workspace_path
+    root = workspace_manager.path
     available: list[dict[str, str]] = []
     for path in root.rglob("package.json"):
         if "node_modules" in path.parts:

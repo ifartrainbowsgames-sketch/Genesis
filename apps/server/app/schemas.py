@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -29,7 +30,7 @@ class ChatResponse(BaseModel):
 class MemorySearchRequest(BaseModel):
     query: str
     conversation_id: str | None = None
-    limit: int = Field(default=5, ge=1, le=20)
+    limit: int = Field(default=5, ge=1, le=100)
 
 
 class MemoryHit(BaseModel):
@@ -38,6 +39,33 @@ class MemoryHit(BaseModel):
     role: str
     content: str
     score: float | None = None
+    created_at: datetime | None = None
+
+
+class MemoryDeleteResponse(BaseModel):
+    deleted: bool
+    id: str
+
+
+class MemoryClearResponse(BaseModel):
+    deleted: int
+    conversation_id: str | None = None
+
+
+class WorkspaceInfo(BaseModel):
+    name: str
+    path: str
+    is_git: bool
+    selected: bool = False
+
+
+class WorkspaceListResponse(BaseModel):
+    current: WorkspaceInfo
+    candidates: list[WorkspaceInfo]
+
+
+class WorkspaceSelectRequest(BaseModel):
+    path: str
 
 
 class AgentPlanRequest(BaseModel):
