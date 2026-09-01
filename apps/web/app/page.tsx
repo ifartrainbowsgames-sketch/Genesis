@@ -16,6 +16,25 @@ type RecommendedCheck = {
   cwd: string;
 };
 type ChangeSet = { summary: string; files: FileChange[]; recommended_checks: RecommendedCheck[]; notes: string[] };
+type ReviewIssue = { severity: "info" | "warning" | "blocking"; file?: string | null; message: string };
+type ReviewReport = { verdict: "approve" | "changes_requested"; summary: string; issues: ReviewIssue[]; notes: string[] };
+type TeamResult = {
+  task_id: string;
+  plan: Plan;
+  changes: ChangeSet | null;
+  review: ReviewReport | null;
+  stop_reason: string;
+  status: string;
+};
+type TaskSummary = {
+  id: string;
+  title: string;
+  status: string;
+  provider: string;
+  model?: string | null;
+  workspace: string;
+  stop_reason?: string | null;
+};
 type ToolProposal = { approval_id: string };
 type ToolResult = { tool: string; result: unknown };
 type Activity = { label: string; detail: string; ok: boolean };
@@ -33,7 +52,10 @@ export default function Home() {
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [changes, setChanges] = useState<ChangeSet | null>(null);
+  const [review, setReview] = useState<ReviewReport | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [agentBudget, setAgentBudget] = useState(3);
   const [workspaces, setWorkspaces] = useState<WorkspaceList | null>(null);
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [memoryQuery, setMemoryQuery] = useState("");
@@ -45,6 +67,7 @@ export default function Home() {
   useEffect(() => {
     void refreshWorkspaces();
     void refreshMemory();
+    void refreshTasks();
   }, []);
 
   function fail(err: unknown) {
@@ -63,6 +86,14 @@ export default function Home() {
     }
   }
 
+  async function refreshTasks() {
+    try {
+      setTasks(await api<TaskSummary[]>("/v1/tasks?limit=20"));
+    } catch (err) {
+      fail(err);
+    }
+  }
+
   async function selectWorkspace(path: string) {
     if (busy) return;
     setBusy(true);
@@ -75,6 +106,7 @@ export default function Home() {
       log("Workspace", `Selected ${selected.path}`);
       setPlan(null);
       setChanges(null);
+      setReview(null);
       await refreshWorkspaces();
     } catch (err) {
       fail(err);
@@ -173,6 +205,7 @@ export default function Home() {
     setError("");
     setBusy(true);
     setChanges(null);
+    setReview(null);
     try {
       setPlan(await api<Plan>("/v1/agent/plan", {
         method: "POST",
@@ -190,6 +223,7 @@ export default function Home() {
     if (!task || busy) return;
     setError("");
     setBusy(true);
+    setReview(null);
     try {
       const result = await api<ChangeSet>("/v1/agent/build", {
         method: "POST",
@@ -199,6 +233,37 @@ export default function Home() {
       log("Builder", `Proposed ${result.files.length} file change(s). Nothing applied yet.`);
     } catch (err) {
       fail(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runTeam() {
+    const task = taskInput.trim();
+    if (!task || busy) return;
+    setError("");
+    setBusy(true);
+    setPlan(null);
+    setChanges(null);
+    setReview(null);
+    try {
+      const result = await api<TeamResult>("/v1/team/run", {
+        method: "POST",
+        body: JSON.stringify({
+          task,
+          provider,
+          model: model.trim() || null,
+          max_agent_calls: agentBudget,
+        }),
+      });
+      setPlan(result.plan);
+      setChanges(result.changes);
+      setReview(result.review);
+      log("AI team", result.stop_reason, result.status !== "failed");
+      await refreshTasks();
+    } catch (err) {
+      fail(err);
+      await refreshTasks();
     } finally {
       setBusy(false);
     }
@@ -232,6 +297,10 @@ export default function Home() {
 
   async function applyChanges() {
     if (!changes || changes.files.length === 0 || busy) return;
+    if (review?.verdict === "changes_requested") {
+      const proceed = window.confirm("The Reviewer requested changes. Apply this proposal anyway?");
+      if (!proceed) return;
+    }
     setError("");
     setBusy(true);
     try {
@@ -334,19 +403,30 @@ export default function Home() {
         </section>
 
         <section className="panel plannerPanel">
-          <div className="panelTitle"><div><span>02</span> Build</div><small>review → approve → apply</small></div>
+          <div className="panelTitle"><div><span>02</span> Build</div><small>architect → builder → reviewer</small></div>
           <form onSubmit={makePlan} className="plannerForm">
             <textarea value={taskInput} onChange={(e) => setTaskInput(e.target.value)} placeholder="Example: add authentication to this repository" rows={5} />
             <div className="buttonRow">
-              <button disabled={busy}>Plan</button>
-              <button type="button" disabled={busy || !taskInput.trim()} onClick={generateChanges}>Generate changes</button>
+              <button disabled={busy}>Plan only</button>
+              <button type="button" disabled={busy || !taskInput.trim()} onClick={generateChanges}>Builder only</button>
+            </div>
+            <div className="teamRow">
+              <label>
+                Agent-call budget
+                <select value={agentBudget} onChange={(e) => setAgentBudget(Number(e.target.value))}>
+                  <option value={1}>1 · Architect</option>
+                  <option value={2}>2 · + Builder</option>
+                  <option value={3}>3 · + Reviewer</option>
+                </select>
+              </label>
+              <button type="button" disabled={busy || !taskInput.trim()} onClick={runTeam}>Run bounded AI team</button>
             </div>
           </form>
           <div className="plan">
-            {!plan && !changes && <div className="empty">Select a repository, describe the job, inspect the plan, then approve exact file changes.</div>}
+            {!plan && !changes && !review && <div className="empty">Select a repository, describe the job, then run a bounded team or individual role. No file is applied without your approval.</div>}
             {plan && (
               <div className="planBlock">
-                <div className="sectionLabel">Plan</div><h2>{plan.goal}</h2>
+                <div className="sectionLabel">Architect plan</div><h2>{plan.goal}</h2>
                 {plan.steps.map((step) => (
                   <article className="step" key={step.id}>
                     <div className="stepNo">{String(step.id).padStart(2, "0")}</div>
@@ -355,9 +435,23 @@ export default function Home() {
                 ))}
               </div>
             )}
+            {review && (
+              <div className={`reviewBlock ${review.verdict}`}>
+                <div className="sectionLabel">Reviewer · {review.verdict.replace("_", " ")}</div>
+                <h2>{review.summary}</h2>
+                {review.issues.length === 0 && <div className="empty">Reviewer found no concrete issues.</div>}
+                {review.issues.map((issue, index) => (
+                  <article className={`reviewIssue ${issue.severity}`} key={`${issue.file ?? "general"}-${index}`}>
+                    <b>{issue.severity}{issue.file ? ` · ${issue.file}` : ""}</b>
+                    <p>{issue.message}</p>
+                  </article>
+                ))}
+                {review.notes.length > 0 && <div className="notes">{review.notes.join(" · ")}</div>}
+              </div>
+            )}
             {changes && (
               <div className="changesBlock">
-                <div className="sectionLabel">Proposed change set</div><h2>{changes.summary}</h2>
+                <div className="sectionLabel">Builder change set</div><h2>{changes.summary}</h2>
                 {changes.files.length === 0 && <div className="empty">Builder proposed no file changes.</div>}
                 {changes.files.map((file) => (
                   <details className="fileChange" key={file.path}>
@@ -396,15 +490,32 @@ export default function Home() {
         </aside>
       </div>
 
-      <section className="panel activityPanel">
-        <div className="panelTitle"><div><span>04</span> Activity</div><small>models · tools · tests · git</small></div>
-        <div className="activityList">
-          {activity.length === 0 && <div className="empty">No activity yet.</div>}
-          {activity.map((item, index) => (
-            <article className={`activityItem ${item.ok ? "ok" : "bad"}`} key={index}><b>{item.label}</b><pre>{item.detail}</pre></article>
-          ))}
-        </div>
-      </section>
+      <div className="bottomGrid">
+        <section className="panel activityPanel">
+          <div className="panelTitle"><div><span>04</span> Activity</div><small>models · tools · tests · git</small></div>
+          <div className="activityList">
+            {activity.length === 0 && <div className="empty">No activity yet.</div>}
+            {activity.map((item, index) => (
+              <article className={`activityItem ${item.ok ? "ok" : "bad"}`} key={index}><b>{item.label}</b><pre>{item.detail}</pre></article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel taskPanel">
+          <div className="panelTitle"><div><span>05</span> Task ledger</div><small>{tasks.length} recent</small></div>
+          <div className="taskList">
+            {tasks.length === 0 && <div className="empty">No team runs recorded yet.</div>}
+            {tasks.map((task) => (
+              <article className="taskItem" key={task.id}>
+                <div className="taskHead"><b>{task.title}</b><span className={`taskStatus ${task.status}`}>{task.status.replace("_", " ")}</span></div>
+                <small>{task.provider}{task.model ? ` · ${task.model}` : ""}</small>
+                <p>{task.stop_reason ?? "Running"}</p>
+                <code title={task.workspace}>{task.workspace}</code>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
     </main>
   );
 }
