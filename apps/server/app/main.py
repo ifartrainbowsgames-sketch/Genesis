@@ -19,6 +19,9 @@ from .schemas import (
     MemoryDeleteResponse,
     MemoryHit,
     MemorySearchRequest,
+    TaskSummary,
+    TeamRunRequest,
+    TeamRunResponse,
     ToolExecuteRequest,
     ToolExecuteResponse,
     ToolProposalRequest,
@@ -32,6 +35,8 @@ from .services.approvals import approvals
 from .services.builder import make_changes
 from .services.llm_router import LLMError, router
 from .services.memory import clear_memory, delete_memory, recent_memory, remember, search_memory
+from .services.task_ledger import list_tasks
+from .services.team import run_team
 from .services.workspace_manager import workspace_manager
 from .tools.registry import TOOLS, validate_tool
 
@@ -42,7 +47,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.3.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin, "http://127.0.0.1:3000"],
@@ -180,6 +185,19 @@ async def memory_delete(memory_id: str) -> MemoryDeleteResponse:
 async def memory_clear(conversation_id: str | None = Query(default=None)) -> MemoryClearResponse:
     deleted = await clear_memory(conversation_id)
     return MemoryClearResponse(deleted=deleted, conversation_id=conversation_id)
+
+
+@app.get("/v1/tasks", response_model=list[TaskSummary])
+async def tasks(limit: int = Query(default=30, ge=1, le=100)) -> list[TaskSummary]:
+    return await list_tasks(limit)
+
+
+@app.post("/v1/team/run", response_model=TeamRunResponse)
+async def team_run(request: TeamRunRequest) -> TeamRunResponse:
+    try:
+        return await run_team(request)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Team run failed: {exc}") from exc
 
 
 @app.post("/v1/agent/plan", response_model=AgentPlan)
