@@ -4,9 +4,9 @@ import json
 import re
 from pathlib import Path
 
-from ..config import settings
 from ..schemas import BuildRequest, ChangeSet, ChatMessage
 from .llm_router import router
+from .workspace_manager import workspace_manager
 
 TEXT_EXTENSIONS = {
     ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".toml", ".yaml", ".yml",
@@ -60,7 +60,7 @@ def _is_text_candidate(path: Path) -> bool:
 
 
 def collect_context(max_files: int = 30, max_total_chars: int = 140_000) -> str:
-    root = settings.workspace_path
+    root = workspace_manager.path
     candidates: list[Path] = []
     priority_names = {
         "README.md", "AGENTS.md", "package.json", "pyproject.toml", "requirements.txt", "Cargo.toml",
