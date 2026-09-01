@@ -15,5 +15,17 @@ services:
       timeout: 5s
       retries: 10
 
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    ports:
+      - "8080:8080"
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-genesis-local-change-me}
+      SEARXNG_BASE_URL: http://localhost:8080/
+    volumes:
+      - ./infra/searxng:/etc/searxng:rw
+      - genesis_searxng_cache:/var/cache/searxng
+
 volumes:
   genesis_pgdata:
+  genesis_searxng_cache:
