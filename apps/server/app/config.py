@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     # Example: [{"name":"local-tools","url":"http://127.0.0.1:9000/mcp","enabled":true}]
     mcp_servers_json: str = "[]"
 
+    # Source-tracked research broker. The bundled Docker service listens on 8080.
+    searxng_url: str | None = "http://127.0.0.1:8080"
+    research_timeout_seconds: float = 20.0
+    research_max_results: int = 12
+
     approval_ttl_seconds: int = 600
     max_file_write_bytes: int = 1_000_000
 
