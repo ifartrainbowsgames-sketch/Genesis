@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import inspect
 import json
 
 from fastapi import FastAPI, HTTPException, Query
@@ -47,7 +48,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.3.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.4.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin, "http://127.0.0.1:3000"],
@@ -249,6 +250,8 @@ async def execute_tool(request: ToolExecuteRequest) -> ToolExecuteResponse:
         approval = approvals.consume(request.approval_id)
         spec = validate_tool(approval.tool)
         result = spec.fn(**approval.arguments)
+        if inspect.isawaitable(result):
+            result = await result
         return ToolExecuteResponse(tool=approval.tool, result=result)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
