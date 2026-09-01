@@ -40,6 +40,7 @@ from .services.builder import make_changes
 from .services.llm_router import LLMError, router
 from .services.memory import clear_memory, delete_memory, recent_memory, remember, search_memory
 from .services.researcher import research
+from .services.system_health import system_health
 from .services.task_ledger import add_artifact, create_task, finish_task, list_tasks
 from .services.team import run_team
 from .services.voice import transcribe_wav
@@ -53,7 +54,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, version="0.6.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.7.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin, "http://127.0.0.1:3000"],
@@ -93,6 +94,11 @@ async def _chat_context(request: ChatRequest) -> tuple[list[ChatMessage], ChatMe
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "app": settings.app_name, "workspace": str(workspace_manager.path)}
+
+
+@app.get("/v1/system/health")
+async def system_health_endpoint() -> dict:
+    return await system_health()
 
 
 @app.get("/v1/models")
