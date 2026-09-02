@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from app.services.workspace_manager import workspace_manager
-from app.tools import workspace as workspace_tools
+from apps.server.app.services.workspace_manager import workspace_manager
+from apps.server.app.tools import workspace as workspace_tools
 
 
 @pytest.fixture()
