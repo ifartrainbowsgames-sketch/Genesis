@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     ollama_chat_model: str = "qwen3:8b"
     ollama_embed_model: str = "nomic-embed-text"
     embedding_dim: int = 768
+    local_vector_scan_limit: int = 1000
 
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.6-terra"
