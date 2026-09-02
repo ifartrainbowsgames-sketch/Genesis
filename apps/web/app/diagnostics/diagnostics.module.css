@@ -77,6 +77,75 @@
   line-height: 1.55;
 }
 
+.storage {
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.storageHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.storageHead strong {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.storageHead p,
+.backupList p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.storageMessage {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  padding: 9px 10px;
+  color: #c8d4dc;
+  font-size: 10px;
+}
+
+.backupList {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.backupRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  padding: 10px;
+}
+
+.backupRow strong {
+  display: block;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.backupRow small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.restoreButton {
+  border-color: #6d4b4b;
+  color: #ffb7b7;
+}
+
 .note {
   margin-top: 16px;
   padding: 14px;
@@ -92,7 +161,9 @@
 }
 
 @media (max-width: 620px) {
-  .summary {
+  .summary,
+  .storageHead,
+  .backupRow {
     align-items: flex-start;
     flex-direction: column;
   }
