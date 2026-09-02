@@ -14,15 +14,26 @@ type ComponentHealth = {
   external?: number;
   running?: boolean;
   enabled?: boolean;
+  schemaVersion?: number | null;
+  expectedSchemaVersion?: number;
 };
 type Health = {
   status: string;
   components: Record<string, ComponentHealth>;
   recommendations?: string[];
 };
+type BackupInfo = {
+  name: string;
+  bytes: number;
+  schemaVersion: number;
+  modifiedAt: string;
+};
+type BackupList = { backups: BackupInfo[] };
+type RestoreStage = { staged: boolean; restartRequired: boolean; name: string; schemaVersion: number };
 
 const LABELS: Record<string, string> = {
-  database: "PostgreSQL / pgvector",
+  database: "Durable database",
+  ai_provider: "Selected AI provider",
   ollama: "Ollama",
   research: "SearXNG research",
   voice: "whisper.cpp voice",
@@ -34,10 +45,19 @@ const LABELS: Record<string, string> = {
   evolution: "Shadow evolution",
 };
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function DiagnosticsPage() {
   const [health, setHealth] = useState<Health | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [desktop, setDesktop] = useState(false);
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [storageBusy, setStorageBusy] = useState(false);
+  const [storageMessage, setStorageMessage] = useState("");
 
   async function refresh() {
     if (busy) return;
@@ -52,7 +72,61 @@ export default function DiagnosticsPage() {
     }
   }
 
-  useEffect(() => { void refresh(); }, []);
+  async function refreshBackups() {
+    try {
+      const result = await api<BackupList>("/v1/system/backups");
+      setBackups(result.backups);
+    } catch (err) {
+      setStorageMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function createBackup() {
+    if (storageBusy) return;
+    setStorageBusy(true);
+    setStorageMessage("");
+    try {
+      const created = await api<BackupInfo>("/v1/system/backups", { method: "POST" });
+      setStorageMessage(`Backup created: ${created.name}`);
+      await refreshBackups();
+    } catch (err) {
+      setStorageMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStorageBusy(false);
+    }
+  }
+
+  async function restoreBackup(backup: BackupInfo) {
+    if (storageBusy) return;
+    const confirmed = window.confirm(
+      `Restore ${backup.name}? Genesis will restart. The current database will be saved automatically as a pre-restore safety backup.`,
+    );
+    if (!confirmed) return;
+
+    setStorageBusy(true);
+    setStorageMessage("Validating and staging restore…");
+    try {
+      const staged = await api<RestoreStage>(
+        `/v1/system/backups/${encodeURIComponent(backup.name)}/restore`,
+        { method: "POST" },
+      );
+      if (!staged.staged || !staged.restartRequired) throw new Error("Genesis did not stage the restore safely");
+      setStorageMessage("Restore validated. Restarting Genesis…");
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("runtime_restart");
+    } catch (err) {
+      setStorageMessage(err instanceof Error ? err.message : String(err));
+      setStorageBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const tauriWindow = window as Window & { __TAURI_INTERNALS__?: unknown };
+    const isDesktop = Boolean(tauriWindow.__TAURI_INTERNALS__);
+    setDesktop(isDesktop);
+    void refresh();
+    if (isDesktop) void refreshBackups();
+  }, []);
 
   return (
     <main className="shell">
@@ -82,9 +156,36 @@ export default function DiagnosticsPage() {
               <span className={`${styles.badge} ${styles[component.status] ?? ""}`}>{component.status.replaceAll("_", " ")}</span>
             </div>
             <p>{component.detail}</p>
+            {name === "database" && component.expectedSchemaVersion ? (
+              <p>Schema: {component.schemaVersion ?? "unknown"} / expected {component.expectedSchemaVersion}</p>
+            ) : null}
           </article>
         ))}
       </div>
+
+      {desktop ? (
+        <section className={`panel ${styles.storage}`}>
+          <div className={styles.storageHead}>
+            <div>
+              <strong>Desktop data recovery</strong>
+              <p>Backups use SQLite&apos;s online backup API. Restore is staged and validated first; Genesis creates an automatic safety copy of the current DB before applying it on restart.</p>
+            </div>
+            <button disabled={storageBusy} onClick={() => void createBackup()}>{storageBusy ? "Working…" : "Create backup"}</button>
+          </div>
+          {storageMessage ? <div className={styles.storageMessage}>{storageMessage}</div> : null}
+          <div className={styles.backupList}>
+            {backups.length === 0 ? <p>No validated Genesis backups yet.</p> : backups.map((backup) => (
+              <div className={styles.backupRow} key={backup.name}>
+                <div>
+                  <strong>{backup.name}</strong>
+                  <small>{formatBytes(backup.bytes)} · schema {backup.schemaVersion} · {new Date(backup.modifiedAt).toLocaleString()}</small>
+                </div>
+                <button className={styles.restoreButton} disabled={storageBusy} onClick={() => void restoreBackup(backup)}>Restore</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {health?.recommendations?.length ? (
         <section className={`panel ${styles.note}`}>
@@ -95,7 +196,7 @@ export default function DiagnosticsPage() {
       ) : null}
 
       <section className={`panel ${styles.note}`}>
-        PostgreSQL and Ollama are the core local services. Research, voice, GitHub, MCP, and external workers can remain intentionally unconfigured. The scheduler, cognitive memory, and evolution layers are local runtime capabilities; evolved prompts remain shadow-only until a human promotion gate succeeds.
+        The selected AI provider and durable database are the only core readiness requirements. Research, voice, GitHub, MCP, and external workers can remain intentionally unconfigured. The scheduler, cognitive memory, and evolution layers are local runtime capabilities; evolved prompts remain shadow-only until a human promotion gate succeeds.
       </section>
     </main>
   );
