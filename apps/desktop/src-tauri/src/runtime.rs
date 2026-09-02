@@ -40,16 +40,19 @@ impl RuntimeInfo {
 #[derive(Default)]
 pub struct SidecarState(pub Mutex<Option<CommandChild>>);
 
-pub fn store_sidecar(state: State<'_, SidecarState>, child: CommandChild) -> Result<(), String> {
-    let mut slot = state
-        .0
-        .lock()
-        .map_err(|_| "Genesis sidecar state lock was poisoned".to_string())?;
-    if let Some(previous) = slot.take() {
-        let _ = previous.kill();
+pub fn store_sidecar(state: State<'_, SidecarState>, child: CommandChild) {
+    match state.0.lock() {
+        Ok(mut slot) => {
+            if let Some(previous) = slot.take() {
+                let _ = previous.kill();
+            }
+            *slot = Some(child);
+        }
+        Err(_) => {
+            // Never leave an untracked privileged local sidecar running.
+            let _ = child.kill();
+        }
     }
-    *slot = Some(child);
-    Ok(())
 }
 
 pub fn clear_sidecar(state: State<'_, SidecarState>) {
