@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 const STARTUP_ROUTED = "genesis-desktop-startup-routed";
 
+type SetupVerification = { ready: boolean; checks: Array<{ name: string; status: string; detail: string }> };
+
 async function waitForApi(attempts = 40) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
@@ -28,16 +30,22 @@ export default function SetupGate() {
 
     setDesktopStarting(true);
     void import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke<{ complete: boolean; installerMode: boolean }>("setup_status"))
-      .then(async (status) => {
+      .then(async ({ invoke }) => {
+        const status = await invoke<{ complete: boolean; installerMode: boolean }>("setup_status");
         if (!status.complete || status.installerMode) {
+          window.location.replace("/setup");
+          return;
+        }
+
+        const verification = await invoke<SetupVerification>("setup_verify");
+        if (!verification.ready) {
           window.location.replace("/setup");
           return;
         }
 
         const healthy = await waitForApi();
         if (!healthy) {
-          setStartupProblem("Genesis installed correctly, but its local API did not become ready. Open Diagnostics or restart Genesis.");
+          setStartupProblem("Genesis is configured, but its local API did not become ready. Open Diagnostics, retry, or reopen Setup to repair the runtime.");
           setDesktopStarting(false);
           return;
         }
@@ -67,11 +75,12 @@ export default function SetupGate() {
         <div style={{ fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: "#7f8c9d", fontWeight: 800 }}>Genesis desktop</div>
         <h2 style={{ margin: "8px 0 8px", fontSize: 23 }}>{startupProblem ? "Genesis needs attention" : "Starting your Workbench…"}</h2>
         <p style={{ margin: 0, color: startupProblem ? "#ffb0b0" : "#97a4b4", lineHeight: 1.6 }}>
-          {startupProblem || "Starting the local Genesis API and loading your configured AI provider."}
+          {startupProblem || "Verifying your Genesis setup, starting the local API, and loading your configured AI provider."}
         </p>
         {startupProblem ? (
-          <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
-            <button onClick={() => window.location.replace("/diagnostics")} style={{ border: "1px solid #5268ab", background: "#293b72", color: "white", borderRadius: 8, padding: "9px 12px", cursor: "pointer" }}>Open Diagnostics</button>
+          <div style={{ display: "flex", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
+            <button onClick={() => window.location.replace("/setup")} style={{ border: "1px solid #5268ab", background: "#293b72", color: "white", borderRadius: 8, padding: "9px 12px", cursor: "pointer" }}>Repair Setup</button>
+            <button onClick={() => window.location.replace("/diagnostics")} style={{ border: "1px solid #37404c", background: "#191e25", color: "#e7ebf0", borderRadius: 8, padding: "9px 12px", cursor: "pointer" }}>Diagnostics</button>
             <button onClick={() => window.location.reload()} style={{ border: "1px solid #37404c", background: "#191e25", color: "#e7ebf0", borderRadius: 8, padding: "9px 12px", cursor: "pointer" }}>Retry</button>
           </div>
         ) : null}
