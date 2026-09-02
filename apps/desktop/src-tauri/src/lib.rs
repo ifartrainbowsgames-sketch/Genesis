@@ -61,7 +61,7 @@ pub fn run() {
             setup::setup_validate_cloud,
             setup::setup_save,
             verify::setup_verify,
-            runtime::setup_finish,
+            runtime::finish_setup_runtime,
         ])
         .setup(|app| {
             #[cfg(desktop)]
