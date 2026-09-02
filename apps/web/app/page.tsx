@@ -14,18 +14,41 @@ type AgentPlan = {
   steps: Array<{ id: number; title: string; description: string; tool?: string | null }>;
   notes: string[];
 };
+type FileChange = { path: string; action: "create" | "replace"; content: string; reason?: string };
+type RecommendedCheck = {
+  kind: "python_compile" | "python_test" | "npm_build" | "npm_test" | "cargo_check" | "cargo_test";
+  cwd: string;
+};
+type ChangeSet = {
+  summary: string;
+  files: FileChange[];
+  recommended_checks: RecommendedCheck[];
+  notes: string[];
+};
+type Review = { verdict: "approve" | "changes_requested"; summary: string };
 type TeamResult = {
   task_id: string;
   status: string;
   stop_reason: string;
   plan: AgentPlan;
-  changes?: { summary: string; files: Array<{ path: string; action: string; reason?: string }> } | null;
-  review?: { verdict: string; summary: string } | null;
+  changes?: ChangeSet | null;
+  review?: Review | null;
 };
 type ChatResult = { content: string; model: string; provider: string };
 type ToolRead = { tool: string; result: Record<string, unknown> };
+type ToolProposal = { approval_id: string; expires_in_seconds: number };
+type ToolExecution = { tool: string; result: Record<string, unknown> };
 type VoiceTranscription = { text: string; engine: string; model: string; language: string };
-
+type CheckResult = { label: string; passed: boolean; output: string };
+type ProposalState = {
+  taskId: string;
+  status: string;
+  changes: ChangeSet;
+  review: Review | null;
+  checkpointId: string;
+  applied: boolean;
+  checks: CheckResult[];
+};
 type Command = { label: string; hint: string; run: () => void };
 
 const CONVERSATION_ID = "genesis-workbench";
@@ -120,12 +143,24 @@ async function readTool(tool: string, arguments_: Record<string, unknown> = {}) 
   });
 }
 
+async function approvedMutation(tool: string, arguments_: Record<string, unknown>) {
+  const proposal = await api<ToolProposal>("/v1/tools/propose", {
+    method: "POST",
+    body: JSON.stringify({ tool, arguments: arguments_ }),
+  });
+  return api<ToolExecution>("/v1/tools/execute", {
+    method: "POST",
+    body: JSON.stringify({ approval_id: proposal.approval_id, approved: true }),
+  });
+}
+
 export default function WorkbenchHome() {
   const router = useRouter();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<Mode>("ask");
+  const [proposal, setProposal] = useState<ProposalState | null>(null);
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [palette, setPalette] = useState(false);
@@ -170,7 +205,7 @@ export default function WorkbenchHome() {
     setTurns((items) => [...items, { role: "assistant", content, meta }]);
   }
 
-  async function runAsk(text: string, history: Turn[]) {
+  async function runAsk(history: Turn[]) {
     setTurns([...history, { role: "assistant", content: "", meta: "streaming" }]);
     await streamApi(
       "/v1/chat/stream",
@@ -210,11 +245,23 @@ export default function WorkbenchHome() {
   }
 
   async function runBuild(text: string) {
+    setProposal(null);
     const result = await api<TeamResult>("/v1/team/run", {
       method: "POST",
       body: JSON.stringify({ task: text, max_agent_calls: 4, use_research: false, research_max_results: 8 }),
     });
     appendAssistant(teamText(result), `${result.status} · task ${result.task_id.slice(0, 8)}`);
+    if (result.changes?.files.length) {
+      setProposal({
+        taskId: result.task_id,
+        status: result.status,
+        changes: result.changes,
+        review: result.review ?? null,
+        checkpointId: "",
+        applied: false,
+        checks: [],
+      });
+    }
   }
 
   async function runReview(text: string) {
@@ -244,7 +291,7 @@ export default function WorkbenchHome() {
     const history = [...turns, { role: "user" as const, content: text }];
     setTurns(history);
     try {
-      if (mode === "ask") await runAsk(text, history);
+      if (mode === "ask") await runAsk(history);
       if (mode === "plan") await runPlan(text);
       if (mode === "build") await runBuild(text);
       if (mode === "review") await runReview(text);
@@ -253,6 +300,90 @@ export default function WorkbenchHome() {
     } finally {
       setBusy(false);
       requestAnimationFrame(() => inputRef.current?.focus());
+    }
+  }
+
+  async function applyProposal() {
+    if (!proposal || proposal.applied || busy) return;
+    if (proposal.review?.verdict === "changes_requested") {
+      const proceed = window.confirm("The reviewer requested changes. Apply this proposal anyway? Genesis will still create an undo checkpoint.");
+      if (!proceed) return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const execution = await approvedMutation("workspace.apply_changes", {
+        changes: proposal.changes.files.map(({ path, action, content }) => ({ path, action, content })),
+      });
+      const checkpointId = String(execution.result.checkpoint_id ?? "");
+      if (!checkpointId) throw new Error("Genesis applied the changes but did not return an undo checkpoint.");
+      setProposal((current) => current ? { ...current, applied: true, checkpointId, checks: [] } : current);
+      appendAssistant(
+        `Applied ${proposal.changes.files.length} file change${proposal.changes.files.length === 1 ? "" : "s"}. A conflict-safe undo checkpoint is active.`,
+        `checkpoint ${checkpointId.slice(0, 8)}`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runProposalChecks() {
+    if (!proposal?.applied || busy) return;
+    setBusy(true);
+    setError("");
+    setProposal((current) => current ? { ...current, checks: [] } : current);
+    try {
+      let checks = proposal.changes.recommended_checks;
+      if (!checks.length) {
+        const detected = await readTool("project.detect_checks");
+        checks = Array.isArray(detected.result.checks) ? detected.result.checks as RecommendedCheck[] : [];
+      }
+      if (!checks.length) {
+        appendAssistant("No supported project checks were detected for this workspace.", "checks");
+        return;
+      }
+
+      const completed: CheckResult[] = [];
+      for (const check of checks) {
+        const execution = await approvedMutation("project.run_check", {
+          kind: check.kind,
+          cwd: check.cwd,
+          timeout_seconds: 300,
+        });
+        const passed = Boolean(execution.result.passed);
+        const output = String(execution.result.output ?? `exit ${String(execution.result.exit_code ?? "?")}`);
+        completed.push({ label: `${check.kind} · ${check.cwd}`, passed, output });
+        setProposal((current) => current ? { ...current, checks: [...completed] } : current);
+        if (!passed) break;
+      }
+      const allPassed = completed.length > 0 && completed.every((item) => item.passed);
+      appendAssistant(
+        allPassed ? `All ${completed.length} project check${completed.length === 1 ? "" : "s"} passed.` : "A project check failed. The undo checkpoint is still available.",
+        allPassed ? "checks passed" : "check failed",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function undoProposal() {
+    if (!proposal?.applied || !proposal.checkpointId || busy) return;
+    if (!window.confirm("Undo only the files Genesis changed in this proposal? Undo will refuse if any of those files were edited after Apply.")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await approvedMutation("workspace.undo_changes", { checkpoint_id: proposal.checkpointId });
+      const restored = proposal.changes.files.length;
+      setProposal((current) => current ? { ...current, applied: false, checkpointId: "", checks: [] } : current);
+      appendAssistant(`Undo restored ${restored} file${restored === 1 ? "" : "s"} to their exact pre-apply state.`, "undo complete");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -373,6 +504,48 @@ export default function WorkbenchHome() {
             </div>
           </article>
         ))}
+
+        {proposal ? (
+          <section className={styles.proposal} aria-label="Genesis proposed changes">
+            <div className={styles.proposalHeader}>
+              <strong>{proposal.changes.summary}</strong>
+              <span>{proposal.review ? `review · ${proposal.review.verdict}` : proposal.status}</span>
+            </div>
+            <div className={styles.fileList}>
+              {proposal.changes.files.map((file) => (
+                <div className={styles.fileRow} key={file.path}>
+                  <span>{file.path}</span><span>{file.action}</span>
+                </div>
+              ))}
+            </div>
+            <div className={styles.proposalActions}>
+              {!proposal.applied ? (
+                <button className={styles.actionButton} type="button" onClick={() => void applyProposal()} disabled={busy}>
+                  {proposal.review?.verdict === "changes_requested" ? "Apply anyway…" : "Apply changes"}
+                </button>
+              ) : (
+                <>
+                  <button className={styles.actionButton} type="button" onClick={() => void runProposalChecks()} disabled={busy}>Run checks</button>
+                  <button className={styles.dangerButton} type="button" onClick={() => void undoProposal()} disabled={busy}>Undo</button>
+                </>
+              )}
+              <span className={styles.actionNote}>
+                {proposal.applied
+                  ? `Checkpoint ${proposal.checkpointId.slice(0, 8)} · undo refuses to overwrite later edits`
+                  : "Nothing is written until you approve Apply."}
+              </span>
+            </div>
+            {proposal.checks.length ? (
+              <div className={styles.checkList}>
+                {proposal.checks.map((check) => (
+                  <div className={`${styles.checkResult} ${check.passed ? styles.checkPass : styles.checkFail}`} key={check.label}>
+                    {check.passed ? "✓" : "✗"} {check.label}\n{check.output.slice(0, 4000)}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
       </section>
 
       <div className={styles.composerDock}>
