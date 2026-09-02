@@ -68,6 +68,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
       - uses: dtolnay/rust-toolchain@stable
       - run: pip install -r apps/server/requirements-build.txt
       - name: Build packaged FastAPI sidecar
@@ -110,5 +113,19 @@ jobs:
           } finally {
             if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npm install
       - name: Compile-check Tauri desktop shell
         run: cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: Build Genesis NSIS installer
+        working-directory: apps/desktop
+        run: npm run tauri build -- --bundles nsis
+      - name: Smoke-test silent NSIS install path
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "NSIS installer was not produced" }
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Silent installer exited with code $($process.ExitCode)" }
+          Write-Host "NSIS installer built and silent install path completed successfully."
