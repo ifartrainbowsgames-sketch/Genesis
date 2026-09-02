@@ -106,23 +106,19 @@ fn find_ollama() -> Option<PathBuf> {
 }
 
 async fn ollama_running() -> bool {
-    reqwest::Client::builder()
+    let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
         .build()
-        .ok()
-        .and_then(|client| {
-            Some(async move {
-                client
-                    .get("http://127.0.0.1:11434/api/tags")
-                    .send()
-                    .await
-                    .map(|response| response.status().is_success())
-                    .unwrap_or(false)
-            })
-        })
-        .map(|future| future)
-        .unwrap_or(async { false })
+    {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+    client
+        .get("http://127.0.0.1:11434/api/tags")
+        .send()
         .await
+        .map(|response| response.status().is_success())
+        .unwrap_or(false)
 }
 
 #[tauri::command]
@@ -270,11 +266,7 @@ pub async fn setup_validate_cloud(provider: String, api_key: String) -> Result<S
 }
 
 #[tauri::command]
-pub fn setup_save(
-    app: AppHandle,
-    provider: String,
-    model: String,
-) -> Result<SetupConfig, String> {
+pub fn setup_save(app: AppHandle, provider: String, model: String) -> Result<SetupConfig, String> {
     if !matches!(provider.as_str(), "ollama" | "openai" | "anthropic") {
         return Err("Unsupported provider.".into());
     }
