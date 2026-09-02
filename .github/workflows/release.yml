@@ -45,7 +45,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$env:GITHUB_REF_NAME" --title "Genesis $env:GITHUB_REF_NAME" --generate-notes
+          gh release view "$env:GITHUB_REF_NAME" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create "$env:GITHUB_REF_NAME" --title "Genesis $env:GITHUB_REF_NAME" --generate-notes
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create GitHub Release" }
+          }
           Get-ChildItem "apps/desktop/src-tauri/target/release/bundle" -Recurse -File | ForEach-Object {
             gh release upload "$env:GITHUB_REF_NAME" $_.FullName --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload $($_.FullName)" }
           }
