@@ -7,12 +7,19 @@ from ..config import settings
 from ..services.workspace_manager import workspace_manager
 
 
+SKIP_PARTS = {".git", "node_modules", ".next", ".venv", "venv", "dist", "build", "target", "__pycache__"}
+
+
 def _safe_path(relative_path: str) -> Path:
     root = workspace_manager.path
     candidate = (root / relative_path).resolve()
     if candidate != root and root not in candidate.parents:
         raise ValueError("Path escapes workspace root")
     return candidate
+
+
+def _visible(relative: Path) -> bool:
+    return not any(part in SKIP_PARTS for part in relative.parts)
 
 
 def list_files(path: str = ".", recursive: bool = False) -> dict[str, Any]:
@@ -25,8 +32,11 @@ def list_files(path: str = ".", recursive: bool = False) -> dict[str, Any]:
     iterator = target.rglob("*") if recursive else target.iterdir()
     items = []
     for item in iterator:
+        relative = item.relative_to(workspace_manager.path)
+        if not _visible(relative):
+            continue
         items.append({
-            "path": str(item.relative_to(workspace_manager.path)).replace("\\", "/"),
+            "path": str(relative).replace("\\", "/"),
             "type": "dir" if item.is_dir() else "file",
             "size": item.stat().st_size if item.is_file() else None,
         })

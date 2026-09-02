@@ -10,6 +10,8 @@ from sqlalchemy import text
 from ..config import settings
 from ..db import SessionLocal
 from .mcp_registry import list_servers
+from .scheduler import scheduler_state
+from .workers import list_workers
 
 
 def _component(status: str, detail: str, **extra) -> dict:
@@ -77,9 +79,34 @@ def _github() -> dict:
 def _mcp() -> dict:
     try:
         servers = list_servers()
-        return _component("configured" if servers else "not_configured", f"{len(servers)} enabled MCP server(s)", servers=len(servers))
+        return _component(
+            "configured" if servers else "not_configured",
+            f"{len(servers)} enabled MCP server(s)",
+            servers=len(servers),
+        )
     except Exception as exc:
         return _component("invalid", f"MCP configuration error: {exc}")
+
+
+def _workers() -> dict:
+    try:
+        workers = list_workers()
+        external = max(0, len(workers) - 1)
+        return _component(
+            "ready",
+            f"{len(workers)} worker(s) available; {external} external adapter(s)",
+            workers=len(workers),
+            external=external,
+        )
+    except Exception as exc:
+        return _component("invalid", f"External worker configuration error: {exc}")
+
+
+def _scheduler() -> dict:
+    state = scheduler_state()
+    if not state["enabled"]:
+        return _component("disabled", "Durable scheduler is disabled", **state)
+    return _component("ready" if state["running"] else "starting", "Durable scheduler state", **state)
 
 
 async def system_health() -> dict:
@@ -91,9 +118,18 @@ async def system_health() -> dict:
         "voice": _voice(),
         "github": _github(),
         "mcp": _mcp(),
+        "workers": _workers(),
+        "scheduler": _scheduler(),
+        "cognitive_memory": _component("ready", "Episodic + semantic/procedural memory services are installed"),
+        "evolution": _component("ready", "Shadow-first deterministic prompt evaluation is installed"),
     }
     essential_ready = all(components[name]["status"] == "ready" for name in ("database", "ollama"))
     return {
         "status": "ready" if essential_ready else "degraded",
         "components": components,
+        "recommendations": [
+            "Configure Ollama and PostgreSQL first; Genesis remains degraded without them.",
+            "External workers are optional and must be explicitly allowlisted server-side.",
+            "Evolution candidates never auto-promote; use the manual promotion gate after deterministic evals.",
+        ],
     }

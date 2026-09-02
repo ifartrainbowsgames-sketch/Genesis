@@ -18,7 +18,9 @@ pub fn run() {
                 let sidecar = app
                     .shell()
                     .sidecar("genesis-server")?
-                    .env("WORKSPACE_ROOT", workspace.as_os_str());
+                    .env("WORKSPACE_ROOT", workspace.as_os_str())
+                    .env("SERVER_HOST", "127.0.0.1")
+                    .env("WEB_ORIGIN", "http://tauri.localhost");
                 let (mut events, child) = sidecar.spawn()?;
                 tauri::async_runtime::spawn(async move {
                     let _child = child;

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import inspect
 import json
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -16,12 +17,23 @@ from .schemas import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
+    EvolutionCandidateInfo,
+    EvolutionPromotionRequest,
+    EvolutionRunRequest,
+    EvolutionRunResponse,
     MemoryClearResponse,
+    MemoryConsolidateRequest,
+    MemoryConsolidateResponse,
     MemoryDeleteResponse,
     MemoryHit,
+    MemoryKnowledgeHit,
     MemorySearchRequest,
     ResearchRequest,
     ResearchRunResponse,
+    ScheduleCreateRequest,
+    ScheduleInfo,
+    ScheduleToggleRequest,
+    TaskDetail,
     TaskSummary,
     TeamRunRequest,
     TeamRunResponse,
@@ -29,7 +41,12 @@ from .schemas import (
     ToolExecuteResponse,
     ToolProposalRequest,
     ToolProposalResponse,
+    ToolReadRequest,
+    ToolReadResponse,
     VoiceTranscription,
+    WorkerInfo,
+    WorkerRunRequest,
+    WorkerRunResponse,
     WorkspaceInfo,
     WorkspaceListResponse,
     WorkspaceSelectRequest,
@@ -37,13 +54,26 @@ from .schemas import (
 from .services.agent import make_plan
 from .services.approvals import approvals
 from .services.builder import make_changes
+from .services.evolution import list_candidates, promote_candidate, run_evolution
 from .services.llm_router import LLMError, router
 from .services.memory import clear_memory, delete_memory, recent_memory, remember, search_memory
+from .services.memory_consolidator import consolidate_memory, recent_knowledge, search_knowledge
 from .services.researcher import research
+from .services.runtime import replay_request, task_detail
+from .services.scheduler import (
+    create_schedule,
+    delete_schedule,
+    list_schedules,
+    run_due_schedules,
+    set_schedule_enabled,
+    start_scheduler,
+    stop_scheduler,
+)
 from .services.system_health import system_health
 from .services.task_ledger import add_artifact, create_task, finish_task, list_tasks
 from .services.team import run_team
 from .services.voice import transcribe_wav
+from .services.workers import list_workers, run_worker
 from .services.workspace_manager import workspace_manager
 from .tools.registry import TOOLS, validate_tool
 
@@ -51,10 +81,14 @@ from .tools.registry import TOOLS, validate_tool
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_db()
-    yield
+    start_scheduler()
+    try:
+        yield
+    finally:
+        await stop_scheduler()
 
 
-app = FastAPI(title=settings.app_name, version="0.7.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="0.9.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.web_origin, "http://127.0.0.1:3000"],
@@ -78,14 +112,19 @@ async def _chat_context(request: ChatRequest) -> tuple[list[ChatMessage], ChatMe
     memory_context: list[str] = []
     last_user = next((m for m in reversed(messages) if m.role == "user"), None)
     if request.use_memory and last_user:
-        hits = await search_memory(last_user.content, request.conversation_id, limit=4)
-        memory_context = [f"{hit.role}: {hit.content}" for hit in hits]
+        episodic = await search_memory(last_user.content, request.conversation_id, limit=3)
+        knowledge = await search_knowledge(last_user.content, request.conversation_id, limit=3)
+        memory_context.extend(f"{hit.role}: {hit.content}" for hit in episodic)
+        memory_context.extend(f"{hit.kind}: {hit.content}" for hit in knowledge)
         if memory_context:
             messages.insert(
                 0,
                 ChatMessage(
                     role="system",
-                    content="Relevant prior memory (may be imperfect; use only when helpful):\n" + "\n".join(memory_context),
+                    content=(
+                        "Relevant prior memory and consolidated knowledge (may be imperfect; use only when helpful):\n"
+                        + "\n".join(memory_context)
+                    ),
                 ),
             )
     return messages, last_user, memory_context
@@ -116,6 +155,12 @@ async def models() -> dict:
         "research": {
             "configured": bool(settings.searxng_url),
             "engine": "searxng",
+        },
+        "runtime": {
+            "schedules": settings.scheduler_enabled,
+            "external_workers": True,
+            "cognitive_memory": True,
+            "shadow_evolution": True,
         },
     }
 
@@ -204,6 +249,24 @@ async def memory_search(request: MemorySearchRequest) -> list[MemoryHit]:
     return await search_memory(request.query, request.conversation_id, request.limit)
 
 
+@app.get("/v1/memory/knowledge", response_model=list[MemoryKnowledgeHit])
+async def memory_knowledge(
+    scope_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=100),
+) -> list[MemoryKnowledgeHit]:
+    return await recent_knowledge(scope_id, limit)
+
+
+@app.post("/v1/memory/knowledge/search", response_model=list[MemoryKnowledgeHit])
+async def memory_knowledge_search(request: MemorySearchRequest) -> list[MemoryKnowledgeHit]:
+    return await search_knowledge(request.query, request.conversation_id, request.limit)
+
+
+@app.post("/v1/memory/consolidate", response_model=MemoryConsolidateResponse)
+async def memory_consolidate(request: MemoryConsolidateRequest) -> MemoryConsolidateResponse:
+    return await consolidate_memory(request.conversation_id, request.max_records)
+
+
 @app.delete("/v1/memory/{memory_id}", response_model=MemoryDeleteResponse)
 async def memory_delete(memory_id: str) -> MemoryDeleteResponse:
     try:
@@ -237,12 +300,84 @@ async def tasks(limit: int = Query(default=30, ge=1, le=100)) -> list[TaskSummar
     return await list_tasks(limit)
 
 
+@app.get("/v1/tasks/{task_id}", response_model=TaskDetail)
+async def task_detail_endpoint(task_id: str) -> TaskDetail:
+    detail = await task_detail(task_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return detail
+
+
+@app.post("/v1/tasks/{task_id}/retry", response_model=TeamRunResponse)
+async def task_retry(task_id: str) -> TeamRunResponse:
+    payload = await replay_request(task_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail="Task has no replayable team request artifact")
+    try:
+        request = TeamRunRequest.model_validate(payload)
+        return await run_team(request, retry_of=task_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Task retry failed: {exc}") from exc
+
+
 @app.post("/v1/team/run", response_model=TeamRunResponse)
 async def team_run(request: TeamRunRequest) -> TeamRunResponse:
     try:
         return await run_team(request)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Team run failed: {exc}") from exc
+
+
+@app.get("/v1/workers", response_model=list[WorkerInfo])
+async def workers() -> list[WorkerInfo]:
+    try:
+        return list_workers()
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/v1/workers/run", response_model=WorkerRunResponse)
+async def workers_run(request: WorkerRunRequest) -> WorkerRunResponse:
+    try:
+        return await run_worker(request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (RuntimeError, ValueError, FileNotFoundError, httpx.HTTPError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/v1/schedules", response_model=list[ScheduleInfo])
+async def schedules() -> list[ScheduleInfo]:
+    return await list_schedules()
+
+
+@app.post("/v1/schedules", response_model=ScheduleInfo)
+async def schedules_create(request: ScheduleCreateRequest) -> ScheduleInfo:
+    try:
+        return await create_schedule(request)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Schedule creation failed: {exc}") from exc
+
+
+@app.post("/v1/schedules/{schedule_id}/toggle", response_model=ScheduleInfo)
+async def schedules_toggle(schedule_id: str, request: ScheduleToggleRequest) -> ScheduleInfo:
+    result = await set_schedule_enabled(schedule_id, request.enabled)
+    if not result:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return result
+
+
+@app.delete("/v1/schedules/{schedule_id}")
+async def schedules_delete(schedule_id: str) -> dict:
+    deleted = await delete_schedule(schedule_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return {"deleted": True, "id": schedule_id}
+
+
+@app.post("/v1/schedules/run-due")
+async def schedules_run_due() -> dict:
+    return {"task_ids": await run_due_schedules()}
 
 
 @app.post("/v1/agent/plan", response_model=AgentPlan)
@@ -269,6 +404,22 @@ async def tools() -> dict:
             for name, spec in sorted(TOOLS.items())
         ]
     }
+
+
+@app.post("/v1/tools/read", response_model=ToolReadResponse)
+async def read_tool(request: ToolReadRequest) -> ToolReadResponse:
+    try:
+        spec = validate_tool(request.tool)
+        if spec.mutates:
+            raise HTTPException(status_code=403, detail="Mutating tools require proposal and explicit approval")
+        result = spec.fn(**request.arguments)
+        if inspect.isawaitable(result):
+            result = await result
+        return ToolReadResponse(tool=request.tool, result=result)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (TypeError, ValueError, FileNotFoundError, FileExistsError, NotADirectoryError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/v1/tools/propose", response_model=ToolProposalResponse)
@@ -300,4 +451,29 @@ async def execute_tool(request: ToolExecuteRequest) -> ToolExecuteResponse:
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (TypeError, ValueError, FileNotFoundError, FileExistsError, NotADirectoryError, RuntimeError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/v1/evolution/candidates", response_model=list[EvolutionCandidateInfo])
+async def evolution_candidates(limit: int = Query(default=50, ge=1, le=100)) -> list[EvolutionCandidateInfo]:
+    return await list_candidates(limit)
+
+
+@app.post("/v1/evolution/run", response_model=EvolutionRunResponse)
+async def evolution_run(request: EvolutionRunRequest) -> EvolutionRunResponse:
+    try:
+        return await run_evolution(request)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Evolution run failed: {exc}") from exc
+
+
+@app.post("/v1/evolution/candidates/{candidate_id}/promote", response_model=EvolutionCandidateInfo)
+async def evolution_promote(candidate_id: str, request: EvolutionPromotionRequest) -> EvolutionCandidateInfo:
+    try:
+        return await promote_candidate(candidate_id, request.approved)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

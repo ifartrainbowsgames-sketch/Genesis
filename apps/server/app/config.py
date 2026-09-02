@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Genesis"
-    server_host: str = "0.0.0.0"
+    server_host: str = "127.0.0.1"
     server_port: int = 8000
     web_origin: str = "http://localhost:3000"
     workspace_root: str = "./workspace"
@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     # Example: [{"name":"local-tools","url":"http://127.0.0.1:9000/mcp","enabled":true}]
     mcp_servers_json: str = "[]"
 
+    # External workers are server-side allowlisted only. Command workers use fixed argv
+    # and shell=False; HTTP workers use explicitly configured endpoints.
+    # Example: [{"name":"claude-acp","type":"command","argv":["claude","--print"],"enabled":true}]
+    external_workers_json: str = "[]"
+    external_worker_timeout_seconds: int = 300
+    external_worker_max_output_bytes: int = 200_000
+
+    # Durable local schedules. Intervals below 60 seconds are rejected.
+    scheduler_enabled: bool = True
+    scheduler_poll_seconds: int = 15
+
     # Source-tracked research broker. The bundled Docker service listens on 8080.
     searxng_url: str | None = "http://127.0.0.1:8080"
     research_timeout_seconds: float = 20.0
@@ -43,6 +54,11 @@ class Settings(BaseSettings):
 
     approval_ttl_seconds: int = 600
     max_file_write_bytes: int = 1_000_000
+
+    # Cognitive-memory consolidation and bounded prompt evolution.
+    memory_consolidation_max_records: int = 200
+    evolution_max_variants: int = 3
+    evolution_max_cases: int = 10
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../../.env", "../../../.env"),

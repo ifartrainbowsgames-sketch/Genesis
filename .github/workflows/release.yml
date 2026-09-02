@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Python build dependencies
+        run: pip install -r apps/server/requirements-build.txt
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm install
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npm install
+      - name: Build packaged FastAPI sidecar
+        shell: pwsh
+        run: ./scripts/build-sidecar.ps1 -SkipInstall
+      - name: Build Tauri installer
+        working-directory: apps/desktop
+        run: npm run tauri build
+      - name: Upload Windows bundles as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-windows-${{ github.ref_name }}
+          path: apps/desktop/src-tauri/target/release/bundle/**
+          if-no-files-found: error
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$env:GITHUB_REF_NAME" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create "$env:GITHUB_REF_NAME" --title "Genesis $env:GITHUB_REF_NAME" --generate-notes
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create GitHub Release" }
+          }
+          Get-ChildItem "apps/desktop/src-tauri/target/release/bundle" -Recurse -File | ForEach-Object {
+            gh release upload "$env:GITHUB_REF_NAME" $_.FullName --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to upload $($_.FullName)" }
+          }

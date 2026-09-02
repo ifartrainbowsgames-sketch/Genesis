@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import "@xterm/xterm/css/xterm.css";
 import "./globals.css";
 import "./nav.css";
 
@@ -14,6 +15,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <nav className="globalNav" aria-label="Genesis sections">
           <Link href="/">Workstation</Link>
+          <Link href="/workbench">Workbench</Link>
+          <Link href="/runtime">Runtime</Link>
+          <Link href="/memory">Memory</Link>
+          <Link href="/evolution">Evolution</Link>
           <Link href="/research">Research</Link>
           <Link href="/voice">Voice</Link>
           <Link href="/connections">Connections</Link>

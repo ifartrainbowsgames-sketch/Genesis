@@ -42,6 +42,32 @@ class MemoryHit(BaseModel):
     created_at: datetime | None = None
 
 
+class MemoryKnowledgeHit(BaseModel):
+    id: str
+    kind: str
+    scope: str
+    scope_id: str | None = None
+    title: str
+    content: str
+    confidence: float
+    source_ids: list[str] = Field(default_factory=list)
+    score: float | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class MemoryConsolidateRequest(BaseModel):
+    conversation_id: str = Field(default="default", min_length=1, max_length=200)
+    max_records: int = Field(default=100, ge=2, le=500)
+
+
+class MemoryConsolidateResponse(BaseModel):
+    conversation_id: str
+    records_read: int
+    knowledge_written: int
+    knowledge: list[MemoryKnowledgeHit] = Field(default_factory=list)
+
+
 class MemoryDeleteResponse(BaseModel):
     deleted: bool
     id: str
@@ -165,6 +191,16 @@ class ToolProposalResponse(BaseModel):
     expires_in_seconds: int
 
 
+class ToolReadRequest(BaseModel):
+    tool: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolReadResponse(BaseModel):
+    tool: str
+    result: Any
+
+
 class ToolExecuteRequest(BaseModel):
     approval_id: str
     approved: bool = False
@@ -218,3 +254,120 @@ class TaskSummary(BaseModel):
     stop_reason: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class TaskArtifactView(BaseModel):
+    id: str
+    kind: str
+    payload: Any
+    created_at: datetime | None = None
+
+
+class RunEventView(BaseModel):
+    id: str
+    sequence: int
+    event_type: str
+    payload: Any
+    created_at: datetime | None = None
+
+
+class TaskDetail(BaseModel):
+    task: TaskSummary
+    artifacts: list[TaskArtifactView] = Field(default_factory=list)
+    events: list[RunEventView] = Field(default_factory=list)
+
+
+class WorkerInfo(BaseModel):
+    name: str
+    type: Literal["builtin", "command", "http"]
+    configured: bool = True
+    detail: str = ""
+
+
+class WorkerRunRequest(BaseModel):
+    worker: str
+    prompt: str = Field(min_length=1, max_length=50_000)
+    provider: Provider = "ollama"
+    model: str | None = None
+    use_research: bool = False
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkerRunResponse(BaseModel):
+    worker: str
+    output: str
+    task_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ScheduleCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=240)
+    request: TeamRunRequest
+    interval_seconds: int = Field(ge=60, le=2_592_000)
+    run_immediately: bool = False
+
+
+class ScheduleInfo(BaseModel):
+    id: str
+    name: str
+    enabled: bool
+    request: TeamRunRequest
+    interval_seconds: int
+    next_run_at: datetime
+    last_run_at: datetime | None = None
+    last_task_id: str | None = None
+    last_error: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ScheduleToggleRequest(BaseModel):
+    enabled: bool
+
+
+class PromptEvalCase(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    input: str = Field(min_length=1, max_length=10_000)
+    expected_contains: list[str] = Field(default_factory=list, max_length=20)
+    forbidden_contains: list[str] = Field(default_factory=list, max_length=20)
+
+
+class EvolutionRunRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=240)
+    base_prompt: str = Field(min_length=1, max_length=30_000)
+    cases: list[PromptEvalCase] = Field(min_length=1, max_length=10)
+    provider: Provider = "ollama"
+    model: str | None = None
+    variants: int = Field(default=2, ge=1, le=3)
+
+
+class EvolutionCaseResult(BaseModel):
+    name: str
+    passed: bool
+    score: float
+    missing: list[str] = Field(default_factory=list)
+    forbidden_found: list[str] = Field(default_factory=list)
+
+
+class EvolutionCandidateInfo(BaseModel):
+    id: str
+    name: str
+    kind: str
+    content: str
+    status: str
+    score: float | None = None
+    baseline_score: float | None = None
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class EvolutionRunResponse(BaseModel):
+    baseline_score: float
+    candidates: list[EvolutionCandidateInfo]
+    best_candidate_id: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
+class EvolutionPromotionRequest(BaseModel):
+    approved: bool = False
