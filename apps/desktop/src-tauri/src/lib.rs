@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::PathBuf};
 
 use tauri::Manager;
 use tauri_plugin_shell::process::CommandEvent;
@@ -6,12 +6,25 @@ use tauri_plugin_shell::ShellExt;
 
 mod setup;
 
+fn starter_workspace(default_workspace: &PathBuf) -> std::io::Result<()> {
+    fs::create_dir_all(default_workspace)?;
+    let empty = fs::read_dir(default_workspace)?.next().is_none();
+    if empty {
+        fs::write(
+            default_workspace.join("README.md"),
+            "# Welcome to Genesis\n\nThis is your starter workspace.\n\nUse **Ask Genesis** in the Workbench to inspect, plan, and propose changes. Generated changes still require explicit approval before they are applied.\n",
+        )?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             setup::setup_status,
+            setup::setup_choose_workspace,
             setup::setup_install_ollama,
             setup::setup_start_ollama,
             setup::setup_pull_model,
@@ -23,8 +36,8 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 let app_data = app.path().app_local_data_dir()?;
-                let workspace = app_data.join("workspace");
-                fs::create_dir_all(&workspace)?;
+                let default_workspace = app_data.join("workspace");
+                starter_workspace(&default_workspace)?;
 
                 let config = setup::load_config(app.handle());
                 let installer_mode = setup::installer_mode();
@@ -36,10 +49,17 @@ pub fn run() {
                 }
 
                 if config.complete && !installer_mode {
+                    let configured_workspace = config
+                        .workspace
+                        .as_ref()
+                        .map(PathBuf::from)
+                        .filter(|path| path.is_dir())
+                        .unwrap_or_else(|| default_workspace.clone());
+
                     let mut sidecar = app
                         .shell()
                         .sidecar("genesis-server")?
-                        .env("WORKSPACE_ROOT", workspace.as_os_str())
+                        .env("WORKSPACE_ROOT", configured_workspace.as_os_str())
                         .env("SERVER_HOST", "127.0.0.1")
                         .env("WEB_ORIGIN", "http://tauri.localhost")
                         .env("GENESIS_DEFAULT_PROVIDER", &config.provider);
