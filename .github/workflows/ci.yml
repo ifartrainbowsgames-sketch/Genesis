@@ -104,6 +104,10 @@ jobs:
         run: |
           $databasePath = Join-Path $env:RUNNER_TEMP "genesis-desktop-ci.db"
           $databaseUrlPath = $databasePath.Replace("\", "/")
+          $stdoutPath = Join-Path $env:RUNNER_TEMP "genesis-sidecar-stdout.log"
+          $stderrPath = Join-Path $env:RUNNER_TEMP "genesis-sidecar-stderr.log"
+          Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+
           $env:DATABASE_URL = "sqlite+aiosqlite:///$databaseUrlPath"
           $env:SCHEDULER_ENABLED = "false"
           $env:SERVER_HOST = "127.0.0.1"
@@ -112,20 +116,37 @@ jobs:
           $env:OPENAI_API_KEY = "ci-placeholder-key-not-used-for-network"
           $env:OLLAMA_BASE_URL = "http://127.0.0.1:1"
           $env:SEARXNG_URL = ""
-          $process = Start-Process -FilePath "./build/sidecar/genesis-server.exe" -PassThru
+
+          $process = Start-Process `
+            -FilePath "./build/sidecar/genesis-server.exe" `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath `
+            -PassThru
+
           try {
             $ready = $false
-            for ($i = 0; $i -lt 45; $i++) {
+            for ($i = 0; $i -lt 60; $i++) {
               Start-Sleep -Seconds 1
+              $process.Refresh()
+              if ($process.HasExited) { break }
               try {
-                $health = Invoke-RestMethod -Uri "http://127.0.0.1:8000/health" -TimeoutSec 2
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1
                 if ($health.status -eq "ok") {
                   $ready = $true
                   break
                 }
               } catch {}
             }
-            if (-not $ready) { throw "Packaged Genesis sidecar did not become healthy" }
+
+            if (-not $ready) {
+              $process.Refresh()
+              Write-Host "--- Genesis sidecar stdout ---"
+              if (Test-Path $stdoutPath) { Get-Content $stdoutPath }
+              Write-Host "--- Genesis sidecar stderr ---"
+              if (Test-Path $stderrPath) { Get-Content $stderrPath }
+              $exitDetail = if ($process.HasExited) { "exit code $($process.ExitCode)" } else { "still running" }
+              throw "Packaged Genesis sidecar did not become healthy ($exitDetail)"
+            }
 
             $system = Invoke-RestMethod -Uri "http://127.0.0.1:8000/v1/system/health" -TimeoutSec 10
             if ($system.status -ne "ready") { throw "Packaged Genesis system health was $($system.status)" }
