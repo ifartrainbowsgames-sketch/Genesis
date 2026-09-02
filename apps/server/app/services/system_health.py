@@ -8,7 +8,8 @@ import httpx
 from sqlalchemy import text
 
 from ..config import settings
-from ..db import SessionLocal, database_backend
+from ..db import SessionLocal, database_backend, schema_version
+from ..schema import CURRENT_SCHEMA_VERSION
 from .mcp_registry import list_servers
 from .scheduler import scheduler_state
 from .workers import list_workers
@@ -24,9 +25,27 @@ async def _database() -> dict:
     try:
         async with SessionLocal() as session:
             await session.execute(text("SELECT 1"))
-        return _component("ready", f"{label} connection succeeded", backend=backend)
+        active_version = schema_version()
+        schema_detail = (
+            f"schema {active_version}/{CURRENT_SCHEMA_VERSION}"
+            if active_version is not None
+            else f"schema version unavailable/{CURRENT_SCHEMA_VERSION}"
+        )
+        return _component(
+            "ready",
+            f"{label} connection succeeded · {schema_detail}",
+            backend=backend,
+            schema_version=active_version,
+            expected_schema_version=CURRENT_SCHEMA_VERSION,
+        )
     except Exception as exc:
-        return _component("unavailable", f"{label} unavailable: {type(exc).__name__}", backend=backend)
+        return _component(
+            "unavailable",
+            f"{label} unavailable: {type(exc).__name__}",
+            backend=backend,
+            schema_version=schema_version(),
+            expected_schema_version=CURRENT_SCHEMA_VERSION,
+        )
 
 
 async def _ollama() -> dict:
