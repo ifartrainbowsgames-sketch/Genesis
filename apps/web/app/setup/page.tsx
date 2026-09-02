@@ -22,6 +22,8 @@ type SetupStatus = {
   embeddingModel: string;
   hardware: HardwareProfile;
 };
+type VerificationCheck = { name: string; status: "ready" | "failed"; detail: string };
+type SetupVerification = { ready: boolean; checks: VerificationCheck[] };
 
 const LOCAL_MODELS = [
   { id: "qwen3:4b", name: "Qwen 3 4B", note: "Compact · good for lighter laptops · ~2.5 GB download" },
@@ -47,6 +49,7 @@ function message(error: unknown) {
 
 export default function SetupPage() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
+  const [verification, setVerification] = useState<SetupVerification | null>(null);
   const [provider, setProvider] = useState<Provider>("ollama");
   const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -61,14 +64,32 @@ export default function SetupPage() {
     setProgress((items) => [...items, line]);
   }
 
+  async function verifySetup(logResults = false) {
+    const result = await invoke<SetupVerification>("setup_verify");
+    setVerification(result);
+    setReady(result.ready);
+    if (logResults) {
+      for (const item of result.checks) {
+        log(`${item.status === "ready" ? "✓" : "✗"} ${item.name}: ${item.detail}`);
+      }
+    }
+    return result;
+  }
+
   async function refresh() {
     try {
       const next = await invoke<SetupStatus>("setup_status");
       setStatus(next);
       setProvider(next.provider);
       setModel((current) => next.complete ? next.model : current || next.hardware.recommendedModel || next.model || "qwen3:8b");
-      if (next.complete) setReady(true);
+      if (next.complete) {
+        await verifySetup(false);
+      } else {
+        setVerification(null);
+        setReady(false);
+      }
     } catch (err) {
+      setReady(false);
       setError(`Genesis Setup must run inside the Windows desktop installer. ${message(err)}`);
     }
   }
@@ -78,6 +99,7 @@ export default function SetupPage() {
   function chooseProvider(next: Provider) {
     setProvider(next);
     setReady(false);
+    setVerification(null);
     setError("");
     if (next === "ollama") setModel(status?.hardware.recommendedModel || "qwen3:8b");
     if (next === "openai") setModel("gpt-5.6-terra");
@@ -101,7 +123,7 @@ export default function SetupPage() {
 
   async function prepareLocal() {
     if (!model) return;
-    setBusy(true); setError(""); setReady(false); setProgress([]);
+    setBusy(true); setError(""); setReady(false); setVerification(null); setProgress([]);
     try {
       let current = await invoke<SetupStatus>("setup_status");
       if (!current.ollamaInstalled) {
@@ -122,8 +144,10 @@ export default function SetupPage() {
       log(`Pulling ${model}. This can take several minutes on the first install…`);
       log(await invoke<string>("setup_pull_model", { model }));
       await invoke("setup_save", { provider: "ollama", model });
-      log("Local AI setup verified. Genesis is ready.");
-      setReady(true);
+      log("Running final Genesis setup verification…");
+      const verified = await verifySetup(true);
+      if (!verified.ready) throw new Error("Setup verification found a problem. Review the failed check below and run preparation again.");
+      log("All setup checks are green. Genesis is ready.");
       await refresh();
     } catch (err) {
       setError(message(err));
@@ -134,14 +158,16 @@ export default function SetupPage() {
 
   async function prepareCloud() {
     if (provider === "ollama" || !model) return;
-    setBusy(true); setError(""); setReady(false); setProgress([]);
+    setBusy(true); setError(""); setReady(false); setVerification(null); setProgress([]);
     try {
       log(`Validating ${model} with the ${provider === "openai" ? "OpenAI" : "Anthropic"} API…`);
       log(await invoke<string>("setup_validate_cloud", { provider, apiKey, model }));
       await invoke("setup_save", { provider, model });
-      log("Cloud AI setup verified. Genesis is ready.");
       setApiKey("");
-      setReady(true);
+      log("Running final Genesis setup verification…");
+      const verified = await verifySetup(true);
+      if (!verified.ready) throw new Error("Setup verification found a problem. Review the failed check below and validate again.");
+      log("All setup checks are green. Genesis is ready.");
       await refresh();
     } catch (err) {
       setError(message(err));
@@ -153,6 +179,8 @@ export default function SetupPage() {
   async function finish() {
     setBusy(true); setError("");
     try {
+      const verified = await verifySetup(false);
+      if (!verified.ready) throw new Error("Genesis setup is no longer healthy. Repair the failed check before finishing installation.");
       await invoke("setup_finish");
     } catch (err) {
       setError(message(err));
@@ -170,7 +198,7 @@ export default function SetupPage() {
               <h1>Choose the brain for your Workbench.</h1>
               <p>Genesis verifies your AI provider and lets you choose the project folder before installation finishes. Local mode detects your hardware, installs and starts Ollama, then prepares the models. Cloud mode validates both the API key and selected model.</p>
             </div>
-            <div className={styles.step}>{status?.installerMode ? "Installer setup" : "First-run setup"}</div>
+            <div className={styles.step}>{status?.installerMode ? "Installer setup" : "First-run / repair"}</div>
           </header>
 
           <div className={styles.body}>
@@ -213,7 +241,7 @@ export default function SetupPage() {
                   {LOCAL_MODELS.map((item) => {
                     const recommended = status?.hardware.recommendedModel === item.id;
                     return (
-                      <button key={item.id} className={`${styles.model} ${model === item.id ? styles.modelActive : ""}`} onClick={() => { setModel(item.id); setReady(false); }} disabled={busy}>
+                      <button key={item.id} className={`${styles.model} ${model === item.id ? styles.modelActive : ""}`} onClick={() => { setModel(item.id); setReady(false); setVerification(null); }} disabled={busy}>
                         <strong>{item.name}{recommended ? " · Recommended" : ""}</strong>
                         <small>{item.note}</small>
                       </button>
@@ -230,12 +258,12 @@ export default function SetupPage() {
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
                   </select>
-                  <select className={styles.select} value={model} onChange={(event) => { setModel(event.target.value); setReady(false); }} disabled={busy}>
+                  <select className={styles.select} value={model} onChange={(event) => { setModel(event.target.value); setReady(false); setVerification(null); }} disabled={busy}>
                     {cloudModels.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
                   </select>
                 </div>
                 <div className={styles.row} style={{ marginTop: 10 }}>
-                  <input className={styles.input} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => { setApiKey(event.target.value); setReady(false); }} placeholder={provider === "openai" ? "OpenAI API key" : "Anthropic API key"} />
+                  <input className={styles.input} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => { setApiKey(event.target.value); setReady(false); setVerification(null); }} placeholder={provider === "openai" ? "OpenAI API key" : "Anthropic API key"} />
                 </div>
                 <p className={styles.note}>The key is never written to setup.json. Genesis verifies access to the selected model, stores the key through the operating-system credential store, and only injects it into the local sidecar process.</p>
               </div>
@@ -250,20 +278,35 @@ export default function SetupPage() {
                 <button className={styles.button} onClick={() => void chooseWorkspace()} disabled={busy}>Choose project folder…</button>
                 <span className={styles.status}>{status?.workspace ?? "Genesis will create a small starter workspace so Workbench is not empty."}</span>
               </div>
-              <p className={styles.note}>The folder picker is native to Windows. Genesis stores only the selected path and opens the sidecar inside that exact project folder.</p>
+              <p className={styles.note}>The folder picker is native to Windows. Genesis stores only the selected path and verifies that Workbench can read it without writing probe files into your project.</p>
             </div>
+
+            {verification ? (
+              <div className={styles.section}>
+                <div className={styles.sectionTitle}>
+                  <strong>3. Final verification</strong>
+                  <span className={`${styles.status} ${verification.ready ? styles.good : styles.warn}`}>{verification.ready ? "All checks green" : "Repair required"}</span>
+                </div>
+                {verification.checks.map((item) => (
+                  <div className={styles.row} key={item.name} style={{ marginTop: 6 }}>
+                    <span className={`${styles.status} ${item.status === "ready" ? styles.good : styles.warn}`}>{item.status === "ready" ? "Ready" : "Failed"}</span>
+                    <span className={styles.note}><strong>{item.name}</strong> · {item.detail}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             {progress.length ? <div className={styles.progress}>{progress.join("\n")}</div> : null}
             {error ? <div className={styles.error}>{error}</div> : null}
-            {ready ? <div className={styles.ready}>Setup checks are green. Workbench can start.</div> : null}
+            {ready ? <div className={styles.ready}>Every required setup check is green. Workbench can start.</div> : null}
 
             <div className={styles.actions}>
               <span className={styles.note}>No project mutation or external worker is enabled by setup. Those still use Genesis approval gates.</span>
               <div className={styles.row}>
-                <button className={styles.button} onClick={() => void refresh()} disabled={busy}>Check again</button>
+                <button className={styles.button} onClick={() => void refresh()} disabled={busy}>Check / repair status</button>
                 {!ready ? (
                   <button className={styles.primary} onClick={() => void (provider === "ollama" ? prepareLocal() : prepareCloud())} disabled={busy || !model || (provider !== "ollama" && apiKey.trim().length < 12)}>
-                    {busy ? "Preparing…" : provider === "ollama" ? "Install & prepare local AI" : "Validate & use cloud AI"}
+                    {busy ? "Preparing…" : provider === "ollama" ? "Install / repair local AI" : "Validate / repair cloud AI"}
                   </button>
                 ) : (
                   <button className={styles.primary} onClick={() => void finish()} disabled={busy}>
