@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import sqlite3
 from collections.abc import Awaitable, Callable
@@ -18,6 +19,7 @@ from .schema import CURRENT_SCHEMA_VERSION
 ASGIApp = Callable[[dict[str, Any], Callable[..., Awaitable[Any]], Callable[..., Awaitable[Any]]], Awaitable[None]]
 BACKUP_PREFIXES = ("genesis-backup-", "genesis-pre-restore-")
 PENDING_RESTORE = "restore.pending.db"
+PENDING_MANIFEST = "restore.pending.json"
 
 
 def _database_path() -> Path:
@@ -120,10 +122,19 @@ def stage_restore(name: str) -> dict[str, Any]:
     source = _safe_backup_path(database_path, name)
     schema_version = _validate_backup(source)
     pending = database_path.parent / PENDING_RESTORE
+    pending_manifest = database_path.parent / PENDING_MANIFEST
     temporary = database_path.parent / f"{PENDING_RESTORE}.tmp"
+    temporary_manifest = database_path.parent / f"{PENDING_MANIFEST}.tmp"
+
     temporary.unlink(missing_ok=True)
+    temporary_manifest.unlink(missing_ok=True)
     shutil.copy2(source, temporary)
     temporary.replace(pending)
+    temporary_manifest.write_text(
+        json.dumps({"schemaVersion": schema_version, "source": source.name}),
+        encoding="utf-8",
+    )
+    temporary_manifest.replace(pending_manifest)
     return {
         "staged": True,
         "name": source.name,
