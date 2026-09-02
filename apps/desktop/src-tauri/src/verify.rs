@@ -1,4 +1,4 @@
-use std::{env, fs, path::PathBuf, time::Duration};
+use std::{fs, path::PathBuf, time::Duration};
 
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
