@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "@xterm/xterm/css/xterm.css";
+import SetupGate from "./SetupGate";
 import "./globals.css";
 import "./nav.css";
 
@@ -13,6 +14,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
+        <SetupGate />
         <nav className="globalNav" aria-label="Genesis sections">
           <Link href="/">Workstation</Link>
           <Link href="/workbench">Workbench</Link>
