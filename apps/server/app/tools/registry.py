@@ -17,6 +17,7 @@ from .mcp_tools import call_tool as mcp_call_tool
 from .mcp_tools import list_tools as mcp_list_tools
 from .mcp_tools import servers as mcp_servers
 from .project import detect_checks, run_check
+from .project_context import context_read, context_search, context_snapshot
 from .workspace import apply_changes, checkpoints, list_files, mkdir, read_file, undo_changes, write_file
 
 
@@ -39,6 +40,9 @@ TOOLS: dict[str, ToolSpec] = {
     "workspace.apply_changes": ToolSpec(apply_changes, "Apply an approved multi-file change set and create a safe undo checkpoint", True),
     "workspace.checkpoints": ToolSpec(checkpoints, "List safe Genesis change checkpoints for the active workspace", False),
     "workspace.undo_changes": ToolSpec(undo_changes, "Restore one Genesis checkpoint if affected files have not changed since apply", True),
+    "project.context_snapshot": ToolSpec(context_snapshot, "Summarize the incremental project index", False),
+    "project.context_search": ToolSpec(context_search, "Search indexed project paths and symbols for relevant context", False),
+    "project.context_read": ToolSpec(context_read, "Read a bounded set of project files selected from the incremental index", False),
     "git.status": ToolSpec(git_status, "Show repository status", False),
     "git.diff": ToolSpec(git_diff, "Show repository diff", False),
     "github.repo_info": ToolSpec(github_repo_info, "Read GitHub repository metadata", False),
