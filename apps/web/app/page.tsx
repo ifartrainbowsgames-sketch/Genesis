@@ -6,7 +6,7 @@ import { api, genesisFetch, streamApi } from "../lib/api";
 import styles from "./workbench-shell.module.css";
 
 type Mode = "ask" | "plan" | "build" | "review";
-type Turn = { role: "user" | "assistant"; content: string; meta?: string };
+type Turn = { role: "user" | "assistant"; content: string; meta?: string; context?: string[] };
 type Workspace = { name: string; path: string; is_git: boolean; selected: boolean };
 type WorkspaceList = { current: Workspace; candidates: Workspace[] };
 type AgentPlan = {
@@ -206,13 +206,40 @@ export default function WorkbenchHome() {
   }
 
   async function runAsk(history: Turn[]) {
-    setTurns([...history, { role: "assistant", content: "", meta: "streaming" }]);
+    const lastUser = [...history].reverse().find((turn) => turn.role === "user");
+    let contextFiles: string[] = [];
+    let projectContext = "";
+    if (lastUser?.content) {
+      try {
+        const selected = await readTool("project.context_read", {
+          query: lastUser.content,
+          max_files: 10,
+          max_total_chars: 60_000,
+        });
+        contextFiles = Array.isArray(selected.result.files)
+          ? selected.result.files.filter((value): value is string => typeof value === "string")
+          : [];
+        projectContext = typeof selected.result.content === "string" ? selected.result.content : "";
+      } catch {
+        // Project context is an enhancement. Chat remains available if indexing fails.
+      }
+    }
+
+    setTurns([...history, { role: "assistant", content: "", meta: "streaming", context: contextFiles }]);
+    const messages = history.map(({ role, content }) => ({ role, content }));
+    if (projectContext && contextFiles.length) {
+      messages.unshift({
+        role: "system",
+        content: `Genesis selected these current project files as bounded context: ${contextFiles.join(", ")}\n\n${projectContext}`,
+      });
+    }
+
     await streamApi(
       "/v1/chat/stream",
       {
         conversation_id: CONVERSATION_ID,
         use_memory: true,
-        messages: history.map(({ role, content }) => ({ role, content })),
+        messages,
       },
       (message) => {
         if (message.event === "delta") {
@@ -227,7 +254,10 @@ export default function WorkbenchHome() {
           setTurns((current) => {
             const copy = [...current];
             const last = copy[copy.length - 1];
-            if (last?.role === "assistant") copy[copy.length - 1] = { ...last, meta: `${message.data.provider} · ${message.data.model}` };
+            if (last?.role === "assistant") {
+              const contextMeta = contextFiles.length ? ` · context ${contextFiles.length}` : "";
+              copy[copy.length - 1] = { ...last, meta: `${message.data.provider} · ${message.data.model}${contextMeta}` };
+            }
             return copy;
           });
         }
@@ -241,7 +271,7 @@ export default function WorkbenchHome() {
       method: "POST",
       body: JSON.stringify({ task: text }),
     });
-    appendAssistant(planText(result), "plan · read-only");
+    appendAssistant(planText(result), "plan · indexed project");
   }
 
   async function runBuild(text: string) {
@@ -500,7 +530,13 @@ export default function WorkbenchHome() {
             <div className={styles.role}>{turn.role === "user" ? "You" : "Genesis"}</div>
             <div>
               <p className={styles.content}>{turn.content || (busy ? "Working…" : "")}</p>
-              {turn.meta ? <div className={styles.meta}><span className={styles.pill}>{turn.meta}</span></div> : null}
+              {turn.meta || turn.context?.length ? (
+                <div className={styles.meta}>
+                  {turn.meta ? <span className={styles.pill}>{turn.meta}</span> : null}
+                  {turn.context?.slice(0, 8).map((path) => <span className={styles.pill} key={path} title="Project context used">{path}</span>)}
+                  {(turn.context?.length ?? 0) > 8 ? <span className={styles.pill}>+{(turn.context?.length ?? 0) - 8}</span> : null}
+                </div>
+              ) : null}
             </div>
           </article>
         ))}
