@@ -2,14 +2,17 @@
 
 import { useEffect, useState } from "react";
 
+import { getRuntimeInfo } from "../lib/api";
+
 const STARTUP_ROUTED = "genesis-desktop-startup-routed";
 
 type SetupVerification = { ready: boolean; checks: Array<{ name: string; status: string; detail: string }> };
 
 async function waitForApi(attempts = 40) {
+  const runtime = await getRuntimeInfo();
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const response = await fetch("http://127.0.0.1:8000/health", { cache: "no-store" });
+      const response = await fetch(`${runtime.apiBase}/health`, { cache: "no-store" });
       if (response.ok) return true;
     } catch {
       // Sidecar can need a moment to bind after Tauri starts it.
@@ -75,7 +78,7 @@ export default function SetupGate() {
         <div style={{ fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: "#7f8c9d", fontWeight: 800 }}>Genesis desktop</div>
         <h2 style={{ margin: "8px 0 8px", fontSize: 23 }}>{startupProblem ? "Genesis needs attention" : "Starting your Workbench…"}</h2>
         <p style={{ margin: 0, color: startupProblem ? "#ffb0b0" : "#97a4b4", lineHeight: 1.6 }}>
-          {startupProblem || "Verifying your Genesis setup, starting the local API, and loading your configured AI provider."}
+          {startupProblem || "Verifying your Genesis setup, starting the private local API, and loading your configured AI provider."}
         </p>
         {startupProblem ? (
           <div style={{ display: "flex", gap: 8, marginTop: 18, flexWrap: "wrap" }}>
