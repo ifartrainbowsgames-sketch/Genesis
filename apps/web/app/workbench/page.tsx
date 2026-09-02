@@ -15,6 +15,13 @@ type Worker = { name: string; type: string; detail: string };
 type ToolRead = { tool: string; result: Record<string, unknown> };
 type Proposal = { approval_id: string; tool: string; arguments: Record<string, unknown>; expires_in_seconds: number };
 type Execution = { tool: string; result: Record<string, unknown> };
+type TeamResult = {
+  task_id: string;
+  status: string;
+  stop_reason: string;
+  changes?: { summary: string; files: Array<{ path: string; action: string; reason?: string }> } | null;
+  review?: { verdict: string; summary: string } | null;
+};
 
 function languageFor(path: string) {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -49,6 +56,18 @@ function settledValue<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null;
 }
 
+function teamSummary(result: TeamResult) {
+  const lines = [`status: ${result.status}`, result.stop_reason];
+  if (result.changes) {
+    lines.push("", result.changes.summary);
+    for (const file of result.changes.files) {
+      lines.push(`${file.action} ${file.path}${file.reason ? ` — ${file.reason}` : ""}`);
+    }
+  }
+  if (result.review) lines.push("", `review: ${result.review.verdict}`, result.review.summary);
+  return lines.join("\n");
+}
+
 export default function WorkbenchPage() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selected, setSelected] = useState("");
@@ -58,6 +77,8 @@ export default function WorkbenchPage() {
   const [selectedCheck, setSelectedCheck] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [workers, setWorkers] = useState<Worker[]>([]);
+  const [agentTask, setAgentTask] = useState("Inspect this workspace and propose the highest-value code improvement. Do not apply changes automatically.");
+  const [agentResult, setAgentResult] = useState("");
   const [gitStatus, setGitStatus] = useState("");
   const [gitDiff, setGitDiff] = useState("");
   const [terminalOutput, setTerminalOutput] = useState("");
@@ -140,6 +161,25 @@ export default function WorkbenchPage() {
     finally { setBusy(false); }
   }
 
+  async function runGenesis() {
+    if (!agentTask.trim()) return;
+    setBusy(true); setError(""); setAgentResult("Genesis is working…");
+    try {
+      // Provider/model are intentionally omitted. The sidecar uses the installer-selected defaults.
+      const result = await api<TeamResult>("/v1/team/run", {
+        method: "POST",
+        body: JSON.stringify({ task: agentTask.trim(), max_agent_calls: 4, use_research: false, research_max_results: 8 }),
+      });
+      setAgentResult(teamSummary(result));
+      await refresh();
+    } catch (err) {
+      setAgentResult("");
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <main className={styles.page}>
       <div className={styles.toolbar}>
@@ -171,8 +211,17 @@ export default function WorkbenchPage() {
         </section>
 
         <aside className={styles.panel} style={{ borderRight: 0 }}>
-          <div className={styles.panelHeader}><span>Runtime</span><span>{tasks.length} tasks</span></div>
+          <div className={styles.panelHeader}><span>Genesis AI</span><span>{tasks.length} tasks</span></div>
           <div className={styles.sideContent}>
+            <div className={styles.card}>
+              <strong>Ask Genesis</strong>
+              <textarea className={styles.aiBox} value={agentTask} onChange={(event) => setAgentTask(event.target.value)} disabled={busy} />
+              <div className={styles.aiActions}>
+                <button className={styles.aiButton} onClick={() => void runGenesis()} disabled={busy || !agentTask.trim()}>Run bounded team</button>
+                <small>Uses installer-selected AI</small>
+              </div>
+              {agentResult ? <div className={styles.aiResult}>{agentResult}</div> : null}
+            </div>
             <div className={styles.card}><strong>Workers</strong>{workers.map((worker) => <small key={worker.name}>{worker.name} · {worker.type}<br /></small>)}</div>
             {tasks.map((task) => <div className={styles.card} key={task.id}><strong>{task.title}</strong><small>{task.status}{task.stop_reason ? ` · ${task.stop_reason}` : ""}</small></div>)}
           </div>
