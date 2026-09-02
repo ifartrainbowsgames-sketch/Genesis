@@ -1,6 +1,6 @@
 # Genesis project status
 
-Genesis 0.9 preserves the roadmap explicitly as **5A → 5B → 5C → 6 → 7 → 8**. Earlier foundation/integration/team work remains complete; this file focuses on the convergence roadmap.
+Genesis 0.10 extends the completed **5A → 5B → 5C → 6 → 7 → 8** convergence roadmap with **Phase 9 — One-Click Genesis**.
 
 ## Phase 5A — reliability foundation: DONE / MERGED
 
@@ -15,22 +15,20 @@ Genesis 0.9 preserves the roadmap explicitly as **5A → 5B → 5C → 6 → 7 �
 - [x] Modernized/deduplicated GitHub Actions
 - [x] Windows desktop icon/package defect fixed
 
-Phase 5A was merged to `main` before the 0.9 convergence branch.
-
-## Phase 5B — Workbench: DONE FOR 0.9
+## Phase 5B — Workbench: DONE
 
 - [x] Filtered workspace Explorer
 - [x] Monaco code editor
 - [x] Approval-gated saves
 - [x] Git status/diff panel
 - [x] Restricted project-check selector
-- [x] xterm check-output surface
-- [x] xterm stdin disabled; not a general shell
-- [x] Runtime task/worker side panel
+- [x] Output-only xterm check surface
+- [x] Runtime task/worker panel
 - [x] Non-Git workspaces degrade gracefully
 - [x] Read-only tool endpoint rejects mutating tools
+- [x] Bounded “Ask Genesis” team control directly in Workbench
 
-## Phase 5C — durable runtime and external workers: DONE FOR 0.9
+## Phase 5C — durable runtime and external workers: DONE
 
 - [x] Persistent task ledger
 - [x] Immutable `team_request` replay artifact
@@ -43,7 +41,7 @@ Phase 5A was merged to `main` before the 0.9 convergence branch.
 - [x] Runtime UI for tasks/events/retries/schedules/workers
 - [x] Unified worker registry
 - [x] Built-in bounded Genesis team worker
-- [x] Fixed-argv command worker adapter using `create_subprocess_exec`
+- [x] Fixed-argv command worker adapter
 - [x] Allowlisted HTTP worker adapter
 - [x] External workers execute only through approval-gated `worker.run`
 - [x] Direct external-worker execution bypass closed by regression coverage
@@ -61,77 +59,101 @@ Phase 5A was merged to `main` before the 0.9 convergence branch.
 - [x] Separate Memory UI layers
 - [x] User-triggered consolidation/search
 
-The V1 consolidator is deterministic and inspectable. It does not delete or rewrite source episodes.
-
 ## Phase 7 — evaluation and evolution V1: DONE
 
-- [x] Bounded prompt variant generation (maximum 3)
-- [x] Bounded evaluation cases (maximum 10)
-- [x] Baseline and candidate execution through the selected provider
+- [x] Bounded prompt variant generation
+- [x] Bounded evaluation cases
+- [x] Baseline/candidate execution through selected provider
 - [x] Deterministic expected/forbidden-string gates
 - [x] Per-case results + latency capture
 - [x] Candidate/evaluation history in PostgreSQL
 - [x] Shadow status by default
 - [x] Manual promotion only
-- [x] Promotion requires all deterministic cases to pass and score to meet/beat baseline
-- [x] Prior passing candidates can be promoted again for manual rollback
-- [x] Evolution UI exposes baseline, scores, failures, and promotion controls
+- [x] Promotion requires all deterministic cases to pass and meet/beat baseline
+- [x] Manual rollback by re-promoting a prior passing candidate
 
-Evolution V1 intentionally does not autonomously rewrite live code, prompts, or configuration.
-
-## Phase 8 — production/release hardening: COMPLETE FOR UNSIGNED 0.9 RELEASE CANDIDATE
-
-### Test gates
+## Phase 8 — production/release hardening: DONE FOR UNSIGNED RELEASES
 
 - [x] Server compile + pytest
-- [x] Real PostgreSQL + pgvector service in CI
-- [x] Database integration coverage for task events/artifacts/cognitive memory/schedules
+- [x] Real PostgreSQL + pgvector CI service
+- [x] Database integration coverage
 - [x] Web production/static-export build gate
 - [x] Windows PyInstaller sidecar packaging gate
-- [x] Packaged Windows sidecar launch + `/health` runtime smoke gate
+- [x] Packaged sidecar launch + `/health` and Tauri-origin CORS smoke gate
 - [x] Tauri/Rust compile gate
-- [x] Current GitHub Actions majors
-- [x] PR CI deduplicated with concurrency cancellation
+- [x] Doctor/startup diagnostics
+- [x] Tag-triggered GitHub Release workflow
+- [x] Security/architecture/status documentation
+- [ ] Authenticode signing — requires a real signing identity/certificate supplied as release secrets
 
-### Startup / Doctor
+## Phase 9 — One-Click Genesis installer: IMPLEMENTED / CI GATED
 
-- [x] `scripts/doctor.ps1` prerequisite + live-health diagnostics
-- [x] Expanded in-app Diagnostics for workers/scheduler/cognitive memory/evolution
-- [x] `scripts/start.ps1` can start PostgreSQL/pgvector + SearXNG, check Ollama, launch API/web, and verify API readiness
-- [x] Clear degraded behavior when optional/local dependencies are unavailable
+### Installer-owned setup
 
-### Release
+- [x] Windows bundle target narrowed to a real NSIS setup executable
+- [x] NSIS post-install hook launches `Genesis.exe --installer-setup`
+- [x] Installer waits for the Genesis setup window before completing
+- [x] Successful interactive setup immediately launches the configured desktop app
+- [x] Silent `/S` install remains non-interactive and defers setup to first launch
+- [x] Existing configured installations skip the setup wizard during upgrades
+- [x] Desktop launch is gated until setup is complete
+- [x] Desktop startup waits for local sidecar health
+- [x] First successful desktop startup lands directly in `/workbench`
 
-- [x] Workspace/web/desktop/runtime versions aligned to 0.9.0
-- [x] Tag-triggered Windows bundle workflow
-- [x] Workflow artifact upload
-- [x] GitHub Release creation and bundle upload on `v*` tags
-- [x] README updated for 0.9
-- [x] Security boundaries documented in `SECURITY.md`
-- [x] Architecture/status truth pass
-- [ ] Authenticode/installer signing — requires a real signing certificate/identity supplied as release secrets
+### Local AI path
 
-### External-service E2E still optional, not a merge blocker
+- [x] Detect existing Ollama installation
+- [x] Detect whether Ollama API is already running
+- [x] Preferred automatic install through fixed `winget` arguments
+- [x] Fallback to official `OllamaSetup.exe` when winget is unavailable/fails
+- [x] Fallback installer Authenticode signature must validate before execution
+- [x] Silent Ollama installer arguments are fixed by Genesis
+- [x] Start `ollama serve` automatically when needed
+- [x] Curated local model selector
+- [x] Pull selected chat model
+- [x] Pull `nomic-embed-text` for local memory embeddings
+- [x] Setup does not become complete until the model preparation succeeds
 
-- [ ] Full Windows runner E2E using a real Ollama model download
-- [ ] Full SearXNG live-query E2E
-- [ ] whisper.cpp live transcription E2E
+### Cloud AI path
 
-Those tests are intentionally not fabricated: they require expensive external downloads/services. The packaged sidecar itself is launched and health-checked in CI.
+- [x] OpenAI option
+- [x] Anthropic option
+- [x] API key is validated before setup completes
+- [x] Secret stored through the operating-system credential store
+- [x] `setup.json` stores provider/model choice only, never the API key
+- [x] Desktop sidecar receives the stored key only as a process environment variable
+
+### Workbench readiness
+
+- [x] Installer-selected provider/model becomes the server default
+- [x] Workbench “Ask Genesis” uses the installer-selected provider automatically
+- [x] AI-generated changes remain proposals; Phase 9 creates no mutation bypass
+- [x] Startup failure offers Diagnostics/retry rather than exposing a half-ready Workbench
+
+### Phase 9 CI gate
+
+- [x] Existing server + pgvector suite retained
+- [x] Existing web production build retained
+- [x] Existing packaged sidecar runtime test retained
+- [x] Rust/Tauri setup bridge compile gate
+- [x] CI builds the actual NSIS installer
+- [x] CI executes the silent NSIS install path to ensure packaging/install does not hang or fail
+
+Phase 9 is merge-ready only when the exact PR head is green on all three jobs, including the real NSIS bundle/install step.
 
 ## Safety invariants
 
 - No unrestricted shell tool.
 - Local paths cannot escape the selected workspace.
-- Recursive Explorer scans skip VCS, dependency, build, virtualenv, target, and cache trees.
 - Mutating tools require short-lived single-use approval tokens.
 - Exact approved tool arguments are stored server-side and reused at execution.
-- External workers are server-side allowlisted and approval-gated.
+- External workers remain server-side allowlisted and approval-gated.
 - Command workers use fixed argv and no shell.
-- Team runs and schedules are bounded and stop before applying workspace mutations.
+- Installer setup uses fixed provider-install commands; API keys never enter repository configuration.
+- Downloaded Ollama fallback installer must pass Windows Authenticode verification before execution.
+- Team runs and schedules remain bounded and stop before workspace mutation.
 - Evolution candidates never auto-promote.
-- Cloud providers remain optional.
 
-## Final release condition
+## Remaining non-code release requirement
 
-Genesis 0.9 is ready to merge when PR #2 is green on **server + PostgreSQL/pgvector, web build, packaged Windows sidecar runtime, and Tauri compile**. After merge, a `v0.9.0` tag can build and publish the Windows release artifacts. Genuine Windows signing remains dependent on a real certificate.
+A public production installer can be built and tested without a certificate, but a genuinely trusted Windows release still needs a real Authenticode signing certificate/identity configured in release secrets.
