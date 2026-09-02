@@ -74,6 +74,11 @@ pub fn runtime_info(state: State<'_, RuntimeInfo>) -> RuntimeInfo {
     state.inner().clone()
 }
 
+#[tauri::command]
+pub fn runtime_restart(app: AppHandle) {
+    app.request_restart();
+}
+
 #[tauri::command(rename = "setup_finish")]
 pub fn finish_setup_runtime(app: AppHandle) -> Result<(), String> {
     if !setup::load_config(&app).complete {
