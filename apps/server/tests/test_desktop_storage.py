@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -56,6 +57,8 @@ def test_backup_is_consistent_and_restore_is_staged(tmp_path: Path, monkeypatch:
     assert staged["staged"] is True
     assert staged["restartRequired"] is True
     assert (tmp_path / desktop_storage.PENDING_RESTORE).is_file()
+    manifest = json.loads((tmp_path / desktop_storage.PENDING_MANIFEST).read_text(encoding="utf-8"))
+    assert manifest == {"schemaVersion": CURRENT_SCHEMA_VERSION, "source": backup["name"]}
 
 
 def test_restore_rejects_path_traversal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,6 +83,7 @@ def test_restore_rejects_database_from_newer_genesis(tmp_path: Path, monkeypatch
     with pytest.raises(ValueError, match="newer than this Genesis build"):
         desktop_storage.stage_restore(future.name)
     assert not (tmp_path / desktop_storage.PENDING_RESTORE).exists()
+    assert not (tmp_path / desktop_storage.PENDING_MANIFEST).exists()
 
 
 def test_corrupt_backup_is_not_offered_for_restore(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
