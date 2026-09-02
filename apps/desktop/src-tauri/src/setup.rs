@@ -7,13 +7,13 @@ use std::{
 };
 
 use keyring::Entry;
+use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 const KEYRING_SERVICE: &str = "Genesis AI";
 const DEFAULT_OLLAMA_MODEL: &str = "qwen3:8b";
 const EMBEDDING_MODEL: &str = "nomic-embed-text";
-const OLLAMA_INSTALLER_URL: &str = "https://ollama.com/download/OllamaSetup.exe";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,6 +21,8 @@ pub struct SetupConfig {
     pub complete: bool,
     pub provider: String,
     pub model: String,
+    #[serde(default)]
+    pub workspace: Option<String>,
 }
 
 impl Default for SetupConfig {
@@ -29,6 +31,7 @@ impl Default for SetupConfig {
             complete: false,
             provider: "ollama".into(),
             model: DEFAULT_OLLAMA_MODEL.into(),
+            workspace: None,
         }
     }
 }
@@ -40,6 +43,7 @@ pub struct SetupStatus {
     pub installer_mode: bool,
     pub provider: String,
     pub model: String,
+    pub workspace: Option<String>,
     pub ollama_installed: bool,
     pub ollama_running: bool,
     pub embedding_model: String,
@@ -188,10 +192,30 @@ pub async fn setup_status(app: AppHandle) -> SetupStatus {
         installer_mode: installer_mode(),
         provider: config.provider,
         model: config.model,
+        workspace: config.workspace,
         ollama_installed: find_ollama().is_some(),
         ollama_running: ollama_running().await,
         embedding_model: EMBEDDING_MODEL.into(),
     }
+}
+
+#[tauri::command]
+pub fn setup_choose_workspace(app: AppHandle) -> Result<Option<String>, String> {
+    let selected = FileDialog::new()
+        .set_title("Choose a project folder for Genesis")
+        .pick_folder();
+    let Some(path) = selected else {
+        return Ok(None);
+    };
+    if !path.is_dir() {
+        return Err("Selected workspace is not a directory.".into());
+    }
+    let canonical = path.canonicalize().map_err(|e| format!("Could not open workspace: {e}"))?;
+    let value = canonical.to_string_lossy().to_string();
+    let mut config = load_config(&app);
+    config.workspace = Some(value.clone());
+    save_config(&app, &config)?;
+    Ok(Some(value))
 }
 
 #[tauri::command]
@@ -322,10 +346,12 @@ pub fn setup_save(app: AppHandle, provider: String, model: String) -> Result<Set
     if model.trim().is_empty() || model.len() > 200 {
         return Err("Model is required.".into());
     }
+    let previous = load_config(&app);
     let config = SetupConfig {
         complete: true,
         provider,
         model: model.trim().to_string(),
+        workspace: previous.workspace,
     };
     save_config(&app, &config)?;
     Ok(config)
