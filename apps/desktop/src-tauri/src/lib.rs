@@ -4,6 +4,7 @@ use tauri::{Manager, RunEvent};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
+mod ollama;
 mod runtime;
 mod setup;
 mod storage;
@@ -60,6 +61,9 @@ pub fn run() {
             setup::setup_install_ollama,
             setup::setup_start_ollama,
             setup::setup_pull_model,
+            ollama::setup_ollama_probe,
+            ollama::setup_ollama_start_existing,
+            ollama::setup_ollama_prepare_models,
             setup::setup_validate_cloud,
             setup::setup_save,
             verify::setup_verify,
