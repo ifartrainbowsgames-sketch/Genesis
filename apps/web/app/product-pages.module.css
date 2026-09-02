@@ -1,0 +1,259 @@
+.page {
+  width: min(980px, 100%);
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 27px;
+  letter-spacing: -.035em;
+}
+
+.header p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.button,
+.primaryButton {
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  padding: 0 11px;
+  color: var(--muted);
+  background: #0d1216;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.primaryButton {
+  color: var(--text);
+  background: #172028;
+  border-color: #35424c;
+}
+
+.button:hover,
+.primaryButton:hover {
+  color: var(--text);
+  border-color: #44515b;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0d1216;
+  overflow: hidden;
+}
+
+.card + .card {
+  margin-top: 12px;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cardHeader strong {
+  font-size: 12px;
+}
+
+.cardHeader span,
+.muted {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 13px 15px;
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,.045);
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+
+button.row {
+  cursor: pointer;
+}
+
+button.row:hover {
+  background: #12191e;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.rowTitle {
+  display: block;
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.rowDetail {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.selected {
+  color: #bfe9d2;
+  border-color: rgba(94, 190, 139, .35);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settingLink {
+  min-height: 110px;
+  display: block;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: #0d1216;
+  text-decoration: none;
+}
+
+.settingLink:hover {
+  border-color: #3c4952;
+  background: #11181d;
+}
+
+.settingLink strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 7px;
+}
+
+.settingLink span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.taskList {
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+}
+
+.eventList {
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
+}
+
+.event {
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.045);
+}
+
+.event:last-child {
+  border-bottom: 0;
+}
+
+.event strong {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 5px;
+}
+
+.event pre {
+  margin: 0;
+  color: var(--muted);
+  font: 10px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(237, 104, 104, .35);
+  border-radius: 8px;
+  color: #efaaaa;
+  background: rgba(132, 35, 35, .12);
+  font-size: 12px;
+}
+
+.empty {
+  padding: 30px 15px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding: 20px 14px 50px;
+  }
+
+  .header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .grid,
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .taskList,
+  .eventList {
+    max-height: none;
+  }
+}
