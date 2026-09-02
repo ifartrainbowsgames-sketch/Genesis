@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -49,7 +50,7 @@ def _eligible(path: Path, root: Path) -> bool:
         relative = path.relative_to(root)
     except ValueError:
         return False
-    if any(part in SKIP_DIRS or part.startswith(".") and part not in {".github"} for part in relative.parts[:-1]):
+    if any(part in SKIP_DIRS for part in relative.parts[:-1]):
         return False
     if path.name in SENSITIVE_NAMES or path.name.endswith((".pem", ".key", ".p12", ".pfx", ".crt")):
         return False
@@ -95,6 +96,17 @@ def _symbols(path: Path, data: bytes) -> tuple[str, ...]:
     return tuple(found)
 
 
+def _walk_candidates(root: Path):
+    for base, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            name for name in dirnames
+            if name not in SKIP_DIRS and (not name.startswith(".") or name == ".github")
+        ]
+        base_path = Path(base)
+        for filename in filenames:
+            yield base_path / filename
+
+
 def refresh_index() -> dict[str, Any]:
     global _cache_root, _cache, _last_indexed_at
     root = workspace_manager.path.resolve()
@@ -108,10 +120,10 @@ def refresh_index() -> dict[str, Any]:
         languages: dict[str, int] = {}
         manifests: list[str] = []
 
-        for path in root.rglob("*"):
+        for path in _walk_candidates(root):
             if len(next_cache) >= MAX_INDEX_FILES:
                 break
-            if not path.is_file() or not _eligible(path, root):
+            if not _eligible(path, root):
                 continue
             try:
                 stat = path.stat()
