@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
+
+import pytest
 
 from apps.server.app.db import SessionLocal, init_db
 from apps.server.app.models import MemoryRecord
@@ -9,6 +12,11 @@ from apps.server.app.services import memory_consolidator
 from apps.server.app.services.runtime import task_detail
 from apps.server.app.services.scheduler import create_schedule, delete_schedule
 from apps.server.app.services.task_ledger import add_artifact, create_task, finish_task
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("GENESIS_RUN_DB_INTEGRATION") != "1",
+    reason="Set GENESIS_RUN_DB_INTEGRATION=1 with PostgreSQL/pgvector available to run database integration tests",
+)
 
 
 async def _no_embedding(_: str):
