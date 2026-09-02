@@ -4,10 +4,21 @@ use tauri::Manager;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
+mod setup;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .invoke_handler(tauri::generate_handler![
+            setup::setup_status,
+            setup::setup_install_ollama,
+            setup::setup_start_ollama,
+            setup::setup_pull_model,
+            setup::setup_validate_cloud,
+            setup::setup_save,
+            setup::setup_finish,
+        ])
         .setup(|app| {
             #[cfg(desktop)]
             {
@@ -15,27 +26,51 @@ pub fn run() {
                 let workspace = app_data.join("workspace");
                 fs::create_dir_all(&workspace)?;
 
-                let sidecar = app
-                    .shell()
-                    .sidecar("genesis-server")?
-                    .env("WORKSPACE_ROOT", workspace.as_os_str())
-                    .env("SERVER_HOST", "127.0.0.1")
-                    .env("WEB_ORIGIN", "http://tauri.localhost");
-                let (mut events, child) = sidecar.spawn()?;
-                tauri::async_runtime::spawn(async move {
-                    let _child = child;
-                    while let Some(event) = events.recv().await {
-                        match event {
-                            CommandEvent::Stdout(bytes) => {
-                                println!("[genesis-server] {}", String::from_utf8_lossy(&bytes));
-                            }
-                            CommandEvent::Stderr(bytes) => {
-                                eprintln!("[genesis-server] {}", String::from_utf8_lossy(&bytes));
-                            }
-                            _ => {}
+                let config = setup::load_config(app.handle());
+                if config.complete && !setup::installer_mode() {
+                    let mut sidecar = app
+                        .shell()
+                        .sidecar("genesis-server")?
+                        .env("WORKSPACE_ROOT", workspace.as_os_str())
+                        .env("SERVER_HOST", "127.0.0.1")
+                        .env("WEB_ORIGIN", "http://tauri.localhost")
+                        .env("GENESIS_DEFAULT_PROVIDER", &config.provider);
+
+                    match config.provider.as_str() {
+                        "ollama" => {
+                            sidecar = sidecar.env("OLLAMA_CHAT_MODEL", &config.model);
                         }
+                        "openai" => {
+                            sidecar = sidecar.env("OPENAI_MODEL", &config.model);
+                            if let Some(secret) = setup::load_secret("openai") {
+                                sidecar = sidecar.env("OPENAI_API_KEY", secret);
+                            }
+                        }
+                        "anthropic" => {
+                            sidecar = sidecar.env("ANTHROPIC_MODEL", &config.model);
+                            if let Some(secret) = setup::load_secret("anthropic") {
+                                sidecar = sidecar.env("ANTHROPIC_API_KEY", secret);
+                            }
+                        }
+                        _ => {}
                     }
-                });
+
+                    let (mut events, child) = sidecar.spawn()?;
+                    tauri::async_runtime::spawn(async move {
+                        let _child = child;
+                        while let Some(event) = events.recv().await {
+                            match event {
+                                CommandEvent::Stdout(bytes) => {
+                                    println!("[genesis-server] {}", String::from_utf8_lossy(&bytes));
+                                }
+                                CommandEvent::Stderr(bytes) => {
+                                    eprintln!("[genesis-server] {}", String::from_utf8_lossy(&bytes));
+                                }
+                                _ => {}
+                            }
+                        }
+                    });
+                }
             }
             Ok(())
         })
