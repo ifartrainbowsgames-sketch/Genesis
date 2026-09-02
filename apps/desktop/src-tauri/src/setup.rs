@@ -36,6 +36,34 @@ impl Default for SetupConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HardwareProfile {
+    pub total_memory_gb: f64,
+    pub free_disk_gb: f64,
+    pub gpu_name: String,
+    pub recommended_model: String,
+}
+
+impl Default for HardwareProfile {
+    fn default() -> Self {
+        Self {
+            total_memory_gb: 0.0,
+            free_disk_gb: 0.0,
+            gpu_name: "Hardware detection unavailable".into(),
+            recommended_model: "qwen3:4b".into(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WindowsHardware {
+    total_memory_gb: f64,
+    free_disk_gb: f64,
+    gpu_name: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupStatus {
@@ -47,6 +75,56 @@ pub struct SetupStatus {
     pub ollama_installed: bool,
     pub ollama_running: bool,
     pub embedding_model: String,
+    pub hardware: HardwareProfile,
+}
+
+fn recommended_model(total_memory_gb: f64, free_disk_gb: f64) -> &'static str {
+    // These are deliberately conservative whole-system recommendations, not
+    // promises about GPU offload. Users can still choose another listed model.
+    if total_memory_gb >= 32.0 && free_disk_gb >= 30.0 {
+        "qwen3-coder:30b"
+    } else if total_memory_gb >= 24.0 && free_disk_gb >= 22.0 {
+        "gpt-oss:20b"
+    } else if total_memory_gb >= 12.0 && free_disk_gb >= 10.0 {
+        "qwen3:8b"
+    } else {
+        "qwen3:4b"
+    }
+}
+
+fn detect_hardware() -> HardwareProfile {
+    // Fixed, internal PowerShell only. No user-controlled text is interpolated.
+    let script = r#"
+$ErrorActionPreference = 'Stop'
+$os = Get-CimInstance Win32_OperatingSystem
+$gpu = Get-CimInstance Win32_VideoController | Sort-Object AdapterRAM -Descending | Select-Object -First 1
+$root = [System.IO.Path]::GetPathRoot($env:LOCALAPPDATA)
+$drive = Get-PSDrive -Name $root.Substring(0,1)
+[pscustomobject]@{
+  totalMemoryGb = [math]::Round(($os.TotalVisibleMemorySize / 1MB), 1)
+  freeDiskGb = [math]::Round(($drive.Free / 1GB), 1)
+  gpuName = if ($gpu) { [string]$gpu.Name } else { 'Unknown GPU' }
+} | ConvertTo-Json -Compress
+"#;
+    let output = match Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return HardwareProfile::default(),
+    };
+    let raw: WindowsHardware = match serde_json::from_slice(&output.stdout) {
+        Ok(value) => value,
+        Err(_) => return HardwareProfile::default(),
+    };
+    HardwareProfile {
+        total_memory_gb: raw.total_memory_gb,
+        free_disk_gb: raw.free_disk_gb,
+        gpu_name: raw.gpu_name.unwrap_or_else(|| "Unknown GPU".into()),
+        recommended_model: recommended_model(raw.total_memory_gb, raw.free_disk_gb).into(),
+    }
 }
 
 fn config_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -187,6 +265,9 @@ if ($sig.Status -ne 'Valid') { throw ('Ollama installer signature is ' + $sig.St
 #[tauri::command]
 pub async fn setup_status(app: AppHandle) -> SetupStatus {
     let config = load_config(&app);
+    let hardware = tauri::async_runtime::spawn_blocking(detect_hardware)
+        .await
+        .unwrap_or_default();
     SetupStatus {
         complete: config.complete,
         installer_mode: installer_mode(),
@@ -196,6 +277,7 @@ pub async fn setup_status(app: AppHandle) -> SetupStatus {
         ollama_installed: find_ollama().is_some(),
         ollama_running: ollama_running().await,
         embedding_model: EMBEDDING_MODEL.into(),
+        hardware,
     }
 }
 
@@ -274,6 +356,14 @@ fn valid_model_name(model: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '-' | '_' | '.' | '/'))
 }
 
+fn valid_cloud_model_name(model: &str) -> bool {
+    !model.is_empty()
+        && model.len() <= 120
+        && model
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
 #[tauri::command]
 pub async fn setup_pull_model(model: String) -> Result<String, String> {
     if !valid_model_name(&model) {
@@ -304,10 +394,13 @@ pub async fn setup_pull_model(model: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn setup_validate_cloud(provider: String, api_key: String) -> Result<String, String> {
+pub async fn setup_validate_cloud(provider: String, api_key: String, model: String) -> Result<String, String> {
     let key = api_key.trim();
     if key.len() < 12 {
         return Err("API key is too short.".into());
+    }
+    if !valid_cloud_model_name(&model) {
+        return Err("Invalid cloud model name.".into());
     }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
@@ -316,13 +409,13 @@ pub async fn setup_validate_cloud(provider: String, api_key: String) -> Result<S
 
     let response = match provider.as_str() {
         "openai" => client
-            .get("https://api.openai.com/v1/models")
+            .get(format!("https://api.openai.com/v1/models/{model}"))
             .bearer_auth(key)
             .send()
             .await
             .map_err(|e| format!("OpenAI validation failed: {e}"))?,
         "anthropic" => client
-            .get("https://api.anthropic.com/v1/models")
+            .get(format!("https://api.anthropic.com/v1/models/{model}"))
             .header("x-api-key", key)
             .header("anthropic-version", "2023-06-01")
             .send()
@@ -332,10 +425,13 @@ pub async fn setup_validate_cloud(provider: String, api_key: String) -> Result<S
     };
 
     if !response.status().is_success() {
-        return Err(format!("The {provider} API rejected this key (HTTP {}).", response.status()));
+        return Err(format!(
+            "The {provider} API could not use {model} with this key (HTTP {}).",
+            response.status()
+        ));
     }
     save_secret(&provider, key)?;
-    Ok(format!("{provider} API key validated and stored in the OS credential vault."))
+    Ok(format!("{provider} key and {model} access validated; the key is stored in the OS credential vault."))
 }
 
 #[tauri::command]
