@@ -5,6 +5,12 @@ import { invoke } from "@tauri-apps/api/core";
 import styles from "./setup.module.css";
 
 type Provider = "ollama" | "openai" | "anthropic";
+type HardwareProfile = {
+  totalMemoryGb: number;
+  freeDiskGb: number;
+  gpuName: string;
+  recommendedModel: string;
+};
 type SetupStatus = {
   complete: boolean;
   installerMode: boolean;
@@ -14,13 +20,14 @@ type SetupStatus = {
   ollamaInstalled: boolean;
   ollamaRunning: boolean;
   embeddingModel: string;
+  hardware: HardwareProfile;
 };
 
 const LOCAL_MODELS = [
-  { id: "qwen3:8b", name: "Qwen 3 8B", note: "Balanced starter · lower hardware load" },
-  { id: "qwen3-coder", name: "Qwen 3 Coder", note: "Coding-focused · recommended for Workbench" },
-  { id: "gpt-oss:20b", name: "GPT-OSS 20B", note: "Stronger local model · needs more RAM/VRAM" },
-  { id: "glm-4.7-flash", name: "GLM 4.7 Flash", note: "Fast coding model · best on stronger GPUs" },
+  { id: "qwen3:4b", name: "Qwen 3 4B", note: "Compact · good for lighter laptops · ~2.5 GB download" },
+  { id: "qwen3:8b", name: "Qwen 3 8B", note: "Balanced local starter · ~5.2 GB download" },
+  { id: "gpt-oss:20b", name: "GPT-OSS 20B", note: "Stronger reasoning · ~14 GB download" },
+  { id: "qwen3-coder:30b", name: "Qwen 3 Coder 30B", note: "Coding-focused · ~19 GB download · stronger hardware" },
 ];
 
 const CLOUD_MODELS: Record<Exclude<Provider, "ollama">, Array<{ id: string; name: string }>> = {
@@ -41,7 +48,7 @@ function message(error: unknown) {
 export default function SetupPage() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [provider, setProvider] = useState<Provider>("ollama");
-  const [model, setModel] = useState("qwen3:8b");
+  const [model, setModel] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
@@ -59,7 +66,7 @@ export default function SetupPage() {
       const next = await invoke<SetupStatus>("setup_status");
       setStatus(next);
       setProvider(next.provider);
-      setModel(next.model || "qwen3:8b");
+      setModel((current) => next.complete ? next.model : current || next.hardware.recommendedModel || next.model || "qwen3:8b");
       if (next.complete) setReady(true);
     } catch (err) {
       setError(`Genesis Setup must run inside the Windows desktop installer. ${message(err)}`);
@@ -72,7 +79,7 @@ export default function SetupPage() {
     setProvider(next);
     setReady(false);
     setError("");
-    if (next === "ollama") setModel("qwen3:8b");
+    if (next === "ollama") setModel(status?.hardware.recommendedModel || "qwen3:8b");
     if (next === "openai") setModel("gpt-5.6-terra");
     if (next === "anthropic") setModel("claude-sonnet-5");
   }
@@ -93,6 +100,7 @@ export default function SetupPage() {
   }
 
   async function prepareLocal() {
+    if (!model) return;
     setBusy(true); setError(""); setReady(false); setProgress([]);
     try {
       let current = await invoke<SetupStatus>("setup_status");
@@ -125,11 +133,11 @@ export default function SetupPage() {
   }
 
   async function prepareCloud() {
-    if (provider === "ollama") return;
+    if (provider === "ollama" || !model) return;
     setBusy(true); setError(""); setReady(false); setProgress([]);
     try {
-      log(`Validating the ${provider === "openai" ? "OpenAI" : "Anthropic"} API key…`);
-      log(await invoke<string>("setup_validate_cloud", { provider, apiKey }));
+      log(`Validating ${model} with the ${provider === "openai" ? "OpenAI" : "Anthropic"} API…`);
+      log(await invoke<string>("setup_validate_cloud", { provider, apiKey, model }));
       await invoke("setup_save", { provider, model });
       log("Cloud AI setup verified. Genesis is ready.");
       setApiKey("");
@@ -160,12 +168,27 @@ export default function SetupPage() {
             <div>
               <div className={styles.kicker}>Genesis 0.10 · One-click setup</div>
               <h1>Choose the brain for your Workbench.</h1>
-              <p>Genesis verifies your AI provider and lets you choose the project folder before installation finishes. Local mode installs and starts Ollama for you. Cloud mode validates your API key and keeps it in the Windows credential vault.</p>
+              <p>Genesis verifies your AI provider and lets you choose the project folder before installation finishes. Local mode detects your hardware, installs and starts Ollama, then prepares the models. Cloud mode validates both the API key and selected model.</p>
             </div>
             <div className={styles.step}>{status?.installerMode ? "Installer setup" : "First-run setup"}</div>
           </header>
 
           <div className={styles.body}>
+            {status ? (
+              <div className={styles.section}>
+                <div className={styles.sectionTitle}>
+                  <strong>This PC</strong>
+                  <span className={styles.status}>Recommended: {status.hardware.recommendedModel}</span>
+                </div>
+                <div className={styles.row}>
+                  <span className={styles.status}>{status.hardware.totalMemoryGb > 0 ? `${status.hardware.totalMemoryGb} GB RAM` : "RAM unknown"}</span>
+                  <span className={styles.status}>{status.hardware.freeDiskGb > 0 ? `${status.hardware.freeDiskGb} GB free` : "Disk space unknown"}</span>
+                  <span className={styles.status}>{status.hardware.gpuName}</span>
+                </div>
+                <p className={styles.note}>Recommendation is conservative and based on total RAM plus free disk space. GPU offload varies by driver and hardware, so Genesis does not pretend a GPU name guarantees a particular model speed.</p>
+              </div>
+            ) : null}
+
             <div className={styles.choiceGrid}>
               <button className={`${styles.choice} ${provider === "ollama" ? styles.choiceActive : ""}`} onClick={() => chooseProvider("ollama")} disabled={busy}>
                 <strong>Local with Ollama</strong>
@@ -174,7 +197,7 @@ export default function SetupPage() {
               </button>
               <button className={`${styles.choice} ${provider !== "ollama" ? styles.choiceActive : ""}`} onClick={() => chooseProvider("openai")} disabled={busy}>
                 <strong>Cloud API</strong>
-                <span>Use OpenAI or Anthropic without downloading a large local chat model. Your key is validated before setup completes.</span>
+                <span>Use OpenAI or Anthropic without downloading a large local chat model. Genesis validates model access before setup completes.</span>
               </button>
             </div>
 
@@ -187,18 +210,21 @@ export default function SetupPage() {
                   </span>
                 </div>
                 <div className={styles.models}>
-                  {LOCAL_MODELS.map((item) => (
-                    <button key={item.id} className={`${styles.model} ${model === item.id ? styles.modelActive : ""}`} onClick={() => { setModel(item.id); setReady(false); }} disabled={busy}>
-                      <strong>{item.name}</strong>
-                      <small>{item.note}</small>
-                    </button>
-                  ))}
+                  {LOCAL_MODELS.map((item) => {
+                    const recommended = status?.hardware.recommendedModel === item.id;
+                    return (
+                      <button key={item.id} className={`${styles.model} ${model === item.id ? styles.modelActive : ""}`} onClick={() => { setModel(item.id); setReady(false); }} disabled={busy}>
+                        <strong>{item.name}{recommended ? " · Recommended" : ""}</strong>
+                        <small>{item.note}</small>
+                      </button>
+                    );
+                  })}
                 </div>
-                <p className={styles.note}>Genesis also prepares the {status?.embeddingModel ?? "nomic-embed-text"} embedding model for memory. Model download time depends on your connection and hardware.</p>
+                <p className={styles.note}>Genesis also prepares the {status?.embeddingModel ?? "nomic-embed-text"} embedding model for memory. You can choose a model above the recommendation; Genesis simply avoids pretending it will be fast on every PC.</p>
               </div>
             ) : (
               <div className={styles.section}>
-                <div className={styles.sectionTitle}><strong>1. Cloud provider</strong><span className={styles.status}>API validation required</span></div>
+                <div className={styles.sectionTitle}><strong>1. Cloud provider</strong><span className={styles.status}>Key + model validation required</span></div>
                 <div className={styles.row}>
                   <select className={styles.select} value={provider} onChange={(event) => chooseProvider(event.target.value as Provider)} disabled={busy}>
                     <option value="openai">OpenAI</option>
@@ -211,7 +237,7 @@ export default function SetupPage() {
                 <div className={styles.row} style={{ marginTop: 10 }}>
                   <input className={styles.input} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => { setApiKey(event.target.value); setReady(false); }} placeholder={provider === "openai" ? "OpenAI API key" : "Anthropic API key"} />
                 </div>
-                <p className={styles.note}>The key is not written to setup.json. Genesis stores it through the operating-system credential store and only injects it into the local sidecar process.</p>
+                <p className={styles.note}>The key is never written to setup.json. Genesis verifies access to the selected model, stores the key through the operating-system credential store, and only injects it into the local sidecar process.</p>
               </div>
             )}
 
@@ -236,7 +262,7 @@ export default function SetupPage() {
               <div className={styles.row}>
                 <button className={styles.button} onClick={() => void refresh()} disabled={busy}>Check again</button>
                 {!ready ? (
-                  <button className={styles.primary} onClick={() => void (provider === "ollama" ? prepareLocal() : prepareCloud())} disabled={busy || (provider !== "ollama" && apiKey.trim().length < 12)}>
+                  <button className={styles.primary} onClick={() => void (provider === "ollama" ? prepareLocal() : prepareCloud())} disabled={busy || !model || (provider !== "ollama" && apiKey.trim().length < 12)}>
                     {busy ? "Preparing…" : provider === "ollama" ? "Install & prepare local AI" : "Validate & use cloud AI"}
                   </button>
                 ) : (
