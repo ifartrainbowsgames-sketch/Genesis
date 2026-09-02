@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+import math
 import uuid
 
 import httpx
 from sqlalchemy import delete, select
 
 from ..config import settings
-from ..db import SessionLocal
+from ..db import SessionLocal, database_backend
 from ..models import MemoryRecord
 from ..schemas import MemoryHit
 
@@ -45,6 +46,17 @@ async def embed_text(text: str) -> list[float] | None:
         except Exception as exc:
             logger.debug("Embedding unavailable: %s", exc)
     return None
+
+
+def cosine_similarity(left: list[float], right: list[float]) -> float:
+    if not left or len(left) != len(right):
+        return -1.0
+    dot = sum(float(a) * float(b) for a, b in zip(left, right, strict=True))
+    left_norm = math.sqrt(sum(float(value) * float(value) for value in left))
+    right_norm = math.sqrt(sum(float(value) * float(value) for value in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return -1.0
+    return dot / (left_norm * right_norm)
 
 
 def _hit(row: MemoryRecord, score: float | None = None) -> MemoryHit:
@@ -85,17 +97,33 @@ async def recent_memory(conversation_id: str | None = None, limit: int = 50) -> 
 
 async def search_memory(query: str, conversation_id: str | None = None, limit: int = 5) -> list[MemoryHit]:
     vector = await embed_text(query)
+    limit = max(1, min(limit, 50))
     try:
         async with SessionLocal() as session:
             stmt = select(MemoryRecord)
             if conversation_id:
                 stmt = stmt.where(MemoryRecord.conversation_id == conversation_id)
 
-            if vector:
+            if vector and database_backend() == "postgresql":
                 distance = MemoryRecord.embedding.cosine_distance(vector)
                 stmt = stmt.where(MemoryRecord.embedding.is_not(None)).order_by(distance).limit(limit)
                 rows = (await session.execute(stmt)).scalars().all()
                 return [_hit(row) for row in rows]
+
+            if vector:
+                scan_limit = max(limit, min(settings.local_vector_scan_limit, 5000))
+                local_stmt = (
+                    stmt.where(MemoryRecord.embedding.is_not(None))
+                    .order_by(MemoryRecord.created_at.desc())
+                    .limit(scan_limit)
+                )
+                rows = (await session.execute(local_stmt)).scalars().all()
+                ranked = sorted(
+                    ((row, cosine_similarity(row.embedding or [], vector)) for row in rows),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )[:limit]
+                return [_hit(row, score) for row, score in ranked]
 
             stmt = stmt.where(MemoryRecord.content.ilike(f"%{query}%")).order_by(MemoryRecord.created_at.desc()).limit(limit)
             rows = (await session.execute(stmt)).scalars().all()

@@ -13,10 +13,15 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://genesis:genesis@localhost:5432/genesis"
 
+    # Desktop installer writes this as a process environment variable after setup.
+    # Supported values: ollama, openai, anthropic.
+    genesis_default_provider: str = "ollama"
+
     ollama_base_url: str = "http://localhost:11434"
     ollama_chat_model: str = "qwen3:8b"
     ollama_embed_model: str = "nomic-embed-text"
     embedding_dim: int = 768
+    local_vector_scan_limit: int = 1000
 
     openai_api_key: str | None = None
     openai_model: str = "gpt-5.6-terra"
@@ -65,6 +70,11 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def default_provider(self) -> str:
+        value = self.genesis_default_provider.strip().lower()
+        return value if value in {"ollama", "openai", "anthropic"} else "ollama"
 
     @property
     def workspace_path(self) -> Path:

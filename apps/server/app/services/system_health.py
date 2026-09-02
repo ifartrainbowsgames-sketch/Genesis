@@ -8,7 +8,8 @@ import httpx
 from sqlalchemy import text
 
 from ..config import settings
-from ..db import SessionLocal
+from ..db import SessionLocal, database_backend, schema_version
+from ..schema import CURRENT_SCHEMA_VERSION
 from .mcp_registry import list_servers
 from .scheduler import scheduler_state
 from .workers import list_workers
@@ -19,12 +20,32 @@ def _component(status: str, detail: str, **extra) -> dict:
 
 
 async def _database() -> dict:
+    backend = database_backend()
+    label = "PostgreSQL + pgvector" if backend == "postgresql" else "Embedded SQLite" if backend == "sqlite" else backend
     try:
         async with SessionLocal() as session:
             await session.execute(text("SELECT 1"))
-        return _component("ready", "PostgreSQL connection succeeded")
+        active_version = schema_version()
+        schema_detail = (
+            f"schema {active_version}/{CURRENT_SCHEMA_VERSION}"
+            if active_version is not None
+            else f"schema version unavailable/{CURRENT_SCHEMA_VERSION}"
+        )
+        return _component(
+            "ready",
+            f"{label} connection succeeded · {schema_detail}",
+            backend=backend,
+            schema_version=active_version,
+            expected_schema_version=CURRENT_SCHEMA_VERSION,
+        )
     except Exception as exc:
-        return _component("unavailable", f"PostgreSQL unavailable: {type(exc).__name__}")
+        return _component(
+            "unavailable",
+            f"{label} unavailable: {type(exc).__name__}",
+            backend=backend,
+            schema_version=schema_version(),
+            expected_schema_version=CURRENT_SCHEMA_VERSION,
+        )
 
 
 async def _ollama() -> dict:
@@ -38,6 +59,21 @@ async def _ollama() -> dict:
         return _component("ready", f"Ollama responded with {model_count} installed model(s)", models=model_count)
     except Exception as exc:
         return _component("unavailable", f"Ollama unavailable: {type(exc).__name__}")
+
+
+def _selected_provider(ollama: dict) -> dict:
+    provider = settings.default_provider
+    if provider == "ollama":
+        return _component(ollama["status"], ollama["detail"], provider="ollama")
+    if provider == "openai":
+        if settings.openai_api_key:
+            return _component("ready", "OpenAI credential is configured", provider="openai", model=settings.openai_model)
+        return _component("unavailable", "OpenAI is selected but no API key is configured", provider="openai")
+    if provider == "anthropic":
+        if settings.anthropic_api_key:
+            return _component("ready", "Anthropic credential is configured", provider="anthropic", model=settings.anthropic_model)
+        return _component("unavailable", "Anthropic is selected but no API key is configured", provider="anthropic")
+    return _component("unavailable", f"Unsupported selected provider: {provider}", provider=provider)
 
 
 async def _searxng() -> dict:
@@ -111,8 +147,10 @@ def _scheduler() -> dict:
 
 async def system_health() -> dict:
     database, ollama, searxng = await asyncio.gather(_database(), _ollama(), _searxng())
+    ai_provider = _selected_provider(ollama)
     components = {
         "database": database,
+        "ai_provider": ai_provider,
         "ollama": ollama,
         "research": searxng,
         "voice": _voice(),
@@ -123,13 +161,13 @@ async def system_health() -> dict:
         "cognitive_memory": _component("ready", "Episodic + semantic/procedural memory services are installed"),
         "evolution": _component("ready", "Shadow-first deterministic prompt evaluation is installed"),
     }
-    essential_ready = all(components[name]["status"] == "ready" for name in ("database", "ollama"))
+    essential_ready = all(components[name]["status"] == "ready" for name in ("database", "ai_provider"))
     return {
         "status": "ready" if essential_ready else "degraded",
         "components": components,
         "recommendations": [
-            "Configure Ollama and PostgreSQL first; Genesis remains degraded without them.",
-            "External workers are optional and must be explicitly allowlisted server-side.",
+            "The selected AI provider and durable database are the only core readiness requirements.",
+            "Research, voice, GitHub, MCP, and external workers are optional and can be configured later.",
             "Evolution candidates never auto-promote; use the manual promotion gate after deterministic evals.",
         ],
     }

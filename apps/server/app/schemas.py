@@ -1,10 +1,13 @@
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
+from .config import settings
+
 
 Provider = Literal["ollama", "openai", "anthropic"]
+DEFAULT_PROVIDER = cast(Provider, settings.default_provider)
 
 
 class ChatMessage(BaseModel):
@@ -14,7 +17,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
-    provider: Provider = "ollama"
+    provider: Provider = DEFAULT_PROVIDER
     model: str | None = None
     conversation_id: str = "default"
     use_memory: bool = True
@@ -96,7 +99,7 @@ class WorkspaceSelectRequest(BaseModel):
 
 class AgentPlanRequest(BaseModel):
     task: str
-    provider: Provider = "ollama"
+    provider: Provider = DEFAULT_PROVIDER
     model: str | None = None
 
 
@@ -116,7 +119,7 @@ class AgentPlan(BaseModel):
 
 class BuildRequest(BaseModel):
     task: str
-    provider: Provider = "ollama"
+    provider: Provider = DEFAULT_PROVIDER
     model: str | None = None
 
 
@@ -150,7 +153,7 @@ class ResearchSource(BaseModel):
 
 class ResearchRequest(BaseModel):
     query: str = Field(min_length=2, max_length=4000)
-    provider: Provider = "ollama"
+    provider: Provider = DEFAULT_PROVIDER
     model: str | None = None
     max_results: int = Field(default=8, ge=1, le=12)
     language: str = Field(default="all", max_length=32)
@@ -226,7 +229,7 @@ class ReviewReport(BaseModel):
 
 class TeamRunRequest(BaseModel):
     task: str
-    provider: Provider = "ollama"
+    provider: Provider = DEFAULT_PROVIDER
     model: str | None = None
     max_agent_calls: int = Field(default=4, ge=1, le=4)
     use_research: bool = False
@@ -287,7 +290,7 @@ class WorkerInfo(BaseModel):
 class WorkerRunRequest(BaseModel):
     worker: str
     prompt: str = Field(min_length=1, max_length=50_000)
-    provider: Provider = "ollama"
+    provider: Provider = DEFAULT_PROVIDER
     model: str | None = None
     use_research: bool = False
     context: dict[str, Any] = Field(default_factory=dict)
@@ -336,7 +339,7 @@ class EvolutionRunRequest(BaseModel):
     name: str = Field(min_length=1, max_length=240)
     base_prompt: str = Field(min_length=1, max_length=30_000)
     cases: list[PromptEvalCase] = Field(min_length=1, max_length=10)
-    provider: Provider = "ollama"
+    provider: Provider = DEFAULT_PROVIDER
     model: str | None = None
     variants: int = Field(default=2, ge=1, le=3)
 

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-import { api } from "../../lib/api";
+import { api, genesisFetch } from "../../lib/api";
 import styles from "./voice.module.css";
 
 type Provider = "ollama" | "openai" | "anthropic";
@@ -10,7 +10,6 @@ type VoiceTranscription = { text: string; engine: string; model: string; languag
 type ChatResponse = { provider: Provider; model: string; content: string };
 type Turn = { role: "user" | "assistant"; content: string };
 
-const API_BASE = process.env.NEXT_PUBLIC_GENESIS_API ?? "http://localhost:8000";
 const TARGET_SAMPLE_RATE = 16000;
 
 function mergeBuffers(buffers: Float32Array[]): Float32Array {
@@ -146,7 +145,7 @@ export default function VoicePage() {
       if (!merged.length) throw new Error("No microphone audio was captured");
       const pcm = downsample(merged, sampleRateRef.current, TARGET_SAMPLE_RATE);
       const wav = encodeWav(pcm, TARGET_SAMPLE_RATE);
-      const response = await fetch(`${API_BASE}/v1/voice/transcribe?language=${encodeURIComponent(language.trim() || "auto")}`, {
+      const response = await genesisFetch(`/v1/voice/transcribe?language=${encodeURIComponent(language.trim() || "auto")}`, {
         method: "POST",
         headers: { "Content-Type": "audio/wav" },
         body: wav,

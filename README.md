@@ -1,55 +1,144 @@
 # Genesis
 
-Genesis is a **local-first personal AI workstation** for chat, coding, research, voice, durable agent runs, cognitive memory, and explicitly approved integrations. Ollama is the default model provider; OpenAI and Anthropic remain optional adapters.
+Genesis is a **local-first personal AI workstation** for coding, chat, durable agent runs, cognitive memory, research, voice, and explicitly approved integrations.
 
-Genesis 0.9 adds the real Workbench and durable operating layer: Monaco editing, an output-only xterm check console, task replay/event history, schedules, allowlisted external workers, cognitive memory consolidation, shadow prompt evolution, PostgreSQL/pgvector integration CI, Doctor diagnostics, and tagged Windows bundle artifacts.
+## Genesis 0.10 — One-Click Genesis
+
+The normal Windows path is now:
+
+```text
+Download Genesis setup.exe
+        ↓
+Run installer
+        ↓
+Genesis Setup opens as part of installation
+        ↓
+Choose Local AI or Cloud API
+        ↓
+Hardware/provider/model checks
+        ↓
+Choose an existing project or starter workspace
+        ↓
+Final native verification turns green
+        ↓
+Installer finishes
+        ↓
+Genesis opens directly in Workbench
+```
+
+A normal desktop user does **not** need to clone the repository, install Python/Node/Rust, run Docker, configure PostgreSQL, or use PowerShell to start Genesis.
+
+### Local AI
+
+Choose **Local with Ollama** and Genesis will:
+
+1. inspect total RAM, free system-drive space, and GPU name;
+2. recommend a conservative model for that PC;
+3. detect an existing Ollama installation;
+4. install Ollama automatically if it is missing;
+5. prefer Windows Package Manager (`winget`) with fixed silent arguments;
+6. if winget is unavailable/fails, download the official `OllamaSetup.exe`, require a valid Windows Authenticode signature, then run it silently;
+7. start the local Ollama service when needed;
+8. pull the selected chat model plus `nomic-embed-text`;
+9. verify both models are actually installed before the installer can finish.
+
+The curated 0.10 starter list is intentionally small: `qwen3:4b`, `qwen3:8b`, `gpt-oss:20b`, and `qwen3-coder:30b`. Hardware recommendations are conservative whole-system guidance, not promises about GPU offload or speed.
+
+### Cloud AI
+
+Choose **Cloud API** to configure OpenAI or Anthropic. Genesis validates both the credential **and access to the exact selected model** before setup completes. The API key is stored through the operating-system credential store; it is never written to `setup.json`.
+
+The 0.10 wizard offers OpenAI GPT-5.6 Sol/Terra/Luna and Anthropic Claude Sonnet 5.
+
+### Embedded desktop storage
+
+The installed desktop application owns its durable runtime. It creates a private `genesis.db` SQLite database under the Genesis Windows application-data directory and starts the FastAPI sidecar with that database automatically.
+
+Desktop SQLite stores:
+
+- task/event history and replay artifacts;
+- schedules;
+- episodic memory;
+- consolidated cognitive memory;
+- evolution candidates/evaluations.
+
+When local embeddings are available, SQLite stores vectors as JSON and Genesis performs a bounded in-process cosine ranking. Source/server deployments can continue using PostgreSQL + pgvector, where native vector distance queries and `FOR UPDATE SKIP LOCKED` schedule claiming remain enabled.
+
+### Setup verification and repair
+
+Before **Finish installation** becomes available, the native verifier checks:
+
+- Genesis-owned app-data is writable;
+- `setup.json` is complete;
+- the selected project/starter workspace is readable;
+- for Ollama: the service responds and both chat + embedding models are installed;
+- for cloud: the validated credential is present in the Windows credential store.
+
+The verifier does not write probe files into a user-selected project.
+
+Normal desktop startup runs the same verification. If a configured installation later loses Ollama/models, a cloud credential, or workspace access, Genesis routes back into **First-run / Repair** instead of opening a knowingly broken Workbench.
+
+### First desktop start
+
+After setup, Genesis starts its packaged FastAPI sidecar with the embedded database, waits for local API health, and opens `/workbench` directly. Startup failures show repair/Diagnostics/retry actions rather than a half-ready editor.
+
+Silent `/S` installs remain non-interactive and defer setup to first normal launch. Existing configured installations skip the interactive wizard during upgrades, then normal startup verification catches any runtime drift.
+
+## Workbench
+
+The Workbench is the default desktop surface:
+
+- filtered workspace Explorer;
+- Monaco code editor;
+- Git status/diff;
+- detected fixed build/test checks;
+- output-only xterm (`stdin` disabled; not a shell);
+- task and worker history;
+- project snapshot with file types, branch, and detected checks;
+- **Plan** — planner only, no Builder call;
+- **Build** — bounded Architect → optional Researcher → Builder → Reviewer workflow;
+- **Fix** — bounded minimal-repair team instruction;
+- **Review** — read-only AI review of the actual current Git diff.
+
+Generated changes remain proposals. File saves, project checks, external workers, GitHub writes, MCP calls, and other registered mutations continue through the explicit proposal → approval → single-use execution path.
+
+## Core capabilities
+
+- Tauri 2 Windows desktop shell
+- packaged FastAPI sidecar
+- Next.js + React workstation UI
+- embedded SQLite desktop durability
+- optional PostgreSQL + pgvector source/server backend
+- Ollama plus optional OpenAI and Anthropic adapters
+- streaming chat
+- durable task/event ledger and replay
+- bounded durable schedules
+- episodic + cognitive memory
+- shadow prompt evolution with deterministic evals and manual promotion
+- source-tracked SearXNG research when configured
+- local whisper.cpp speech-to-text when configured
+- approval-gated GitHub, MCP, workspace mutations, project checks, and external workers
 
 Genesis intentionally **does not self-deploy, self-copy, expose an unrestricted shell, auto-apply generated code, or auto-promote evolved behavior**.
 
-## What works now
+## Optional services
 
-- FastAPI backend
-- Next.js 16 + React 19 workstation UI
-- Ollama chat plus optional OpenAI and Anthropic adapters
-- PostgreSQL + pgvector episodic and cognitive memory
-- Streaming chat with episodic + consolidated knowledge retrieval
-- Bounded Architect → optional Researcher → Builder → Reviewer workflow
-- Persistent task ledger, immutable request artifacts, ordered run events, and retries
-- Durable bounded interval schedules
-- Workbench with filtered Explorer, Monaco editor, Git diff/status, tasks/workers, and output-only xterm
-- Approval-gated local writes, fixed project checks, GitHub writes, MCP calls, and external workers
-- Fixed-argv command worker adapter (`shell=False`) and allowlisted HTTP worker adapter
-- Repository selector restricted to configured roots
-- GitHub adapter with SHA-safe replacement
-- MCP v2 Streamable HTTP allowlist
-- Source-tracked Researcher backed by local SearXNG
-- Local push-to-talk speech-to-text through configured whisper.cpp
-- Shadow prompt evolution with deterministic eval gates and manual promotion only
-- Doctor diagnostics in the UI and `scripts/doctor.ps1`
-- Tauri 2 desktop shell with PyInstaller FastAPI sidecar
-- PostgreSQL/pgvector CI integration plus Windows sidecar/Tauri gates
-- Tag-triggered Windows bundle artifact workflow
+The packaged desktop does not require these to open a functional coding Workbench:
 
-## 1. Windows prerequisites
+- **SearXNG** — source-tracked web research
+- **whisper.cpp** — local speech-to-text
+- **GitHub token** — approved repository writes/PR operations
+- **MCP configuration** — approved external MCP tools
+- **external worker configuration** — approved allowlisted command/HTTP workers
+- **PostgreSQL + pgvector** — optional source/server deployment backend; not required by the installed Windows desktop
 
-Recommended:
+Cloud-only AI installations can operate without Ollama. In that mode conversational memory remains durable; local vector embeddings are unavailable unless Ollama/embedding support is later configured, so memory search can fall back to text matching.
 
-- Python 3.11+
-- Node.js 22+
-- Docker Desktop
-- Ollama
-- Git
-- Rust stable when building the desktop application
-- whisper.cpp only if you want local speech-to-text
+Use **Diagnostics** to see which capabilities are ready, unavailable, or intentionally unconfigured.
 
-Pull the default local models:
+## Developer/source setup
 
-```powershell
-ollama pull qwen3:8b
-ollama pull nomic-embed-text
-```
-
-## 2. First setup
+Developers working on Genesis itself still use the repository workflow:
 
 ```powershell
 Copy-Item .env.example .env
@@ -59,7 +148,7 @@ docker compose up -d postgres searxng
 ./scripts/start.ps1
 ```
 
-Open:
+Local source-mode URLs:
 
 - Workstation: `http://localhost:3000`
 - Workbench: `http://localhost:3000/workbench`
@@ -72,209 +161,79 @@ Open:
 - Diagnostics: `http://localhost:3000/diagnostics`
 - API docs: `http://localhost:8000/docs`
 
-`./scripts/doctor.ps1` checks developer prerequisites, `.env`, the Python environment, web dependencies, Docker Compose parsing, and—when the API is running—the live `/v1/system/health` component report.
+## Workspace boundary
 
-## 3. Use an existing local repository
-
-Genesis touches only the selected workspace. Point it at a repository you own:
+Genesis touches only the selected workspace. In source mode you can point it at another repository you own:
 
 ```powershell
 ./scripts/use-workspace.ps1 -Path "C:/Code/my-project"
 ```
 
-The script updates `WORKSPACE_ROOT` and adds the repository parent to `WORKSPACE_ALLOWED_ROOTS`. The in-app repository picker can switch only inside configured roots.
+The in-app selector stays inside configured roots. Recursive Explorer scans omit `.git`, `node_modules`, `.next`, virtual environments, build output, Rust `target`, and cache trees.
 
-The Workbench Explorer also skips `.git`, `node_modules`, `.next`, virtual environments, build output, Rust `target`, and cache trees so generated/dependency files do not crowd out source files.
+## Durable runtime
 
-## 4. Workbench
+A bounded team run stores the immutable request, Architect plan, optional Researcher report, Builder change proposal, Reviewer report, ordered events, final status, and stop reason. Retries reconstruct the original request and record lineage instead of mutating the previous run.
 
-`/workbench` is the coding surface:
+On PostgreSQL, schedule claiming uses database row locking with `SKIP LOCKED`. On the single-sidecar SQLite desktop backend, Genesis uses an in-process claim lock and still advances `next_run_at` before execution so the scheduler loop and manual run-due action cannot duplicate the same job.
 
-- Explorer reads the selected workspace through the read-only tool broker.
-- Monaco opens UTF-8 source files.
-- Save creates an exact `workspace.write` proposal, shows a browser confirmation, then consumes a single-use approval token.
-- Detected project checks remain restricted to six fixed command families: Python compile/test, npm build/test, and Cargo check/test.
-- xterm is **output-only** (`stdin` disabled); it displays restricted check output and is not a shell.
-- Git status/diff is read-only and degrades gracefully when the selected workspace is not a Git repository.
+## External workers
 
-## 5. Durable runtime
+External runtimes are optional and server-side allowlisted through `EXTERNAL_WORKERS_JSON`. Command workers use a fixed argv array, receive the task on stdin, stay inside the selected workspace, and launch without a shell. HTTP workers use explicit HTTP(S) endpoints. External workers execute only through the approval-gated `worker.run` tool.
 
-`/runtime` exposes the persistent operating layer.
+## Cognitive memory
 
-A team run stores:
+Genesis preserves raw episodic records and stores consolidated semantic/procedural knowledge separately. Consolidated items retain source-record IDs and confidence. PostgreSQL uses pgvector for vector ranking; desktop SQLite uses bounded in-process cosine ranking when embeddings exist. Consolidation never rewrites or deletes the source episodes.
 
-- the immutable `team_request`
-- Architect plan
-- optional Researcher report
-- Builder change proposal
-- Reviewer report
-- ordered `RunEvent` history
-- final status and stop reason
+## Shadow evolution
 
-A retry reconstructs the original request artifact and records `retry_of` lineage rather than silently mutating the old run.
+Evolution remains shadow-first. Genesis evaluates a baseline and a bounded set of prompt candidates against deterministic cases. A candidate can be promoted only after required gates pass and a human explicitly approves it. Promotion does not autonomously rewrite source code.
 
-Durable schedules are stored in PostgreSQL. Due rows are claimed with `FOR UPDATE SKIP LOCKED`; `next_run_at` advances before execution so a slow run is not picked up twice. Scheduled runs use the same bounded team and still stop before workspace mutation.
+## Desktop build
 
-## 6. External workers
-
-External runtimes are optional and **server-side allowlisted** through `EXTERNAL_WORKERS_JSON`.
-
-Command workers use a fixed argv array, receive the prompt on stdin, remain inside the selected workspace, and launch through `asyncio.create_subprocess_exec` without a shell. HTTP workers use an explicitly configured HTTP(S) endpoint and optional bearer token environment-variable name.
-
-Example shapes:
-
-```env
-EXTERNAL_WORKERS_JSON=[{"name":"agent-cli","type":"command","argv":["agent-cli","--print"],"cwd":".","enabled":true}]
-```
-
-or:
-
-```env
-EXTERNAL_WORKERS_JSON=[{"name":"openhands","type":"http","url":"http://127.0.0.1:3100/run","enabled":true}]
-```
-
-The direct `/v1/workers/run` endpoint accepts the built-in `genesis-team` only. External workers execute through the registered `worker.run` tool, so they require proposal → explicit approval → single-use execution just like other side-effect-capable tools.
-
-This generic adapter can wrap products such as Claude Code, Codex, OpenHands, Wayland, or another local worker when you explicitly configure a compatible fixed command or HTTP bridge. Genesis does not auto-discover arbitrary executables.
-
-## 7. Cognitive memory
-
-Genesis keeps raw episodic `MemoryRecord` rows unchanged and stores consolidated knowledge in a separate `MemoryKnowledge` table.
-
-The V1 consolidator creates:
-
-- semantic conversation summaries
-- procedural/user-stated working preferences and constraints
-- source record IDs for traceability
-- confidence values
-- optional pgvector embeddings
-
-`/memory` shows episodic and cognitive layers separately, supports search, and lets the user trigger consolidation. Chat retrieval can use both layers. Consolidation does not delete the source episodes.
-
-## 8. Shadow evolution
-
-`/evolution` implements bounded prompt evolution rather than live self-modification.
-
-Each experiment:
-
-1. evaluates the baseline prompt on 1–10 deterministic cases;
-2. asks the selected provider for at most three bounded variants;
-3. runs the same cases against each variant;
-4. scores required substrings and forbidden substrings deterministically;
-5. stores candidate score, baseline score, case results, latency, provider, and model;
-6. leaves every candidate in `shadow` status.
-
-A candidate can be promoted only after explicit user confirmation **and** only when every deterministic case passed and its score met or beat baseline. There is no automatic promotion or code rewrite. An older passing candidate can be promoted again, providing a manual rollback path.
-
-## 9. Source-tracked research
-
-Start the bundled SearXNG broker:
-
-```powershell
-docker compose up -d searxng
-```
-
-The Researcher receives bounded result titles, URLs, and snippets and produces a synthesis with source IDs such as `[S1]`. A standalone research run is stored as a task artifact, and a team run can use the same source-tracked artifact as Builder context.
-
-## 10. Local voice
-
-Genesis does not send microphone audio to a cloud speech service by default. The browser records mono audio, converts it to 16 kHz PCM WAV, and sends it to FastAPI. The backend invokes only the configured whisper.cpp binary/model with a fixed transcription argument set.
-
-```env
-WHISPER_CPP_BINARY=C:/Tools/whisper.cpp/build/bin/Release/whisper-cli.exe
-WHISPER_CPP_MODEL=C:/Tools/whisper.cpp/models/ggml-base.en.bin
-```
-
-The transcript is inspectable/editable before sending it to chat. Spoken replies use browser/OS speech synthesis and can be disabled.
-
-## 11. GitHub and MCP
-
-GitHub:
-
-```env
-GITHUB_TOKEN=...
-GITHUB_API_URL=https://api.github.com
-```
-
-Use a fine-grained token restricted to repositories and permissions you actually want. Existing-file replacement requires the SHA Genesis observed during read; stale writes are rejected.
-
-MCP:
-
-```env
-MCP_SERVERS_JSON=[{"name":"local-tools","url":"http://127.0.0.1:9000/mcp","enabled":true}]
-```
-
-Genesis connects only to explicitly configured Streamable HTTP endpoints. `mcp.call_tool` is treated as side-effect-capable and goes through approval.
-
-## 12. Desktop application
-
-Development with packaged FastAPI sidecar:
+Development desktop build:
 
 ```powershell
 npm run desktop:dev:windows
 ```
 
-Bundle build:
+Create the Windows NSIS installer:
 
 ```powershell
 npm run desktop:build:windows
 ```
 
-The PyInstaller sidecar is named for the Rust target triple and launched by Tauri. PostgreSQL, Ollama, SearXNG, and whisper.cpp remain explicit local services/adapters rather than being silently embedded.
-
-Tagged pushes matching `v*` run `.github/workflows/release.yml` and upload Windows bundle artifacts. These artifacts are not claimed to be Authenticode-signed unless a real signing identity/certificate is supplied to the release environment.
+Tauri bundles the PyInstaller FastAPI sidecar. The Windows bundle target is NSIS and uses the Genesis installer-setup hook.
 
 ## Testing and CI
 
-Pull requests run three primary gates:
+Pull requests must pass three primary gates:
 
-- **server** — Python compile + pytest against a real `pgvector/pgvector:pg16` PostgreSQL service
-- **web** — Next.js production/static-export build
-- **desktop-sidecar** — Windows PyInstaller sidecar package + Rust/Tauri compile check
+- **server** — Python compile + pytest against real `pgvector/pgvector:pg16`, plus an embedded SQLite schema/vector-storage smoke test;
+- **web** — Next.js production/static-export build;
+- **desktop-sidecar** — packaged FastAPI sidecar using embedded SQLite, system-health/provider/CORS checks, Rust/Tauri compile, **actual NSIS installer build**, and silent NSIS install smoke test.
 
-The server suite covers authority boundaries, workspace traversal, approval single-use/expiry, planner parsing, Ollama embedding fallback, restricted project execution, GitHub SHA-safe writes, MCP validation, research source hygiene, external-worker safety, deterministic evolution scoring, cognitive-memory extraction, and PostgreSQL-backed runtime integration.
+A `v*` tag runs `.github/workflows/release.yml`, builds the Windows bundle, uploads the workflow artifact, and publishes it to a GitHub Release.
 
-## Architecture
-
-```text
-Next.js / Tauri workstation
-  |-- Workbench (Explorer / Monaco / diff / output-only xterm)
-  |-- Runtime (tasks / events / retries / schedules / workers)
-  |-- Memory (episodic + cognitive)
-  |-- Evolution (shadow candidates + deterministic eval)
-  |-- Research / Voice / Connections / Diagnostics
-  v
-FastAPI sidecar :8000
-  |-- model router ----------> Ollama / optional OpenAI / Anthropic
-  |-- durable runtime -------> PostgreSQL
-  |-- episodic/cognitive ----> PostgreSQL + pgvector
-  |-- safe workspace --------> selected local root
-  |-- tool approval broker --> short-lived single-use approvals
-  |-- external workers ------> fixed argv or allowlisted HTTP
-  |-- GitHub / MCP ----------> explicit adapters
-  |-- Researcher ------------> SearXNG
-  `-- voice STT -------------> configured whisper.cpp
-```
-
-See `docs/ARCHITECTURE.md` and `PROJECT_STATUS.md` for detailed flows and remaining release constraints.
+The repository does not claim an installer or update is Authenticode-signed unless a real signing identity/certificate has been supplied to the release environment. Automatic self-update installation is intentionally not enabled until a signed update-verification path is available.
 
 ## Security model
 
+- Local API binds to loopback by default.
+- Desktop durable data is stored under Genesis application data; setup write probes do not touch the selected project.
 - Workspace paths cannot escape the selected root.
-- Writes have configured size limits.
-- Recursive Explorer scans omit dependency/build/cache trees.
-- Mutating registered tools use short-lived single-use approval IDs.
+- Mutating tools use short-lived single-use approval IDs.
+- Execution uses the exact tool arguments stored at approval time.
 - Generated code is previewed and not auto-applied.
-- Project checks are allowlisted instead of exposing a shell.
-- xterm is output-only.
-- External command workers use fixed argv + `shell=False` and are approval-gated.
-- External HTTP workers are explicit allowlist entries and are approval-gated.
-- GitHub credentials remain server-side; existing-file writes are SHA-safe.
+- Built-in project checks are allowlisted; there is no unrestricted shell tool.
+- Workbench xterm is output-only.
+- External workers are server-side allowlisted and approval-gated.
+- GitHub existing-file writes are SHA-safe.
 - MCP destinations are allowlisted and calls require approval.
-- Research routes through configured SearXNG.
-- Voice invokes only configured whisper.cpp paths and bounded WAV input.
-- Team calls and schedules remain bounded.
+- Installer cloud keys are stored through the OS credential store.
+- Ollama fallback download must have a valid Windows Authenticode signature before Genesis executes it.
+- Hardware inspection uses a fixed internal Windows query; user text is never interpolated into a shell command.
+- Team calls and schedules stay bounded.
 - Evolution stays shadow-first and manual-promotion-only.
-- Cloud model providers are opt-in.
 
-See `SECURITY.md` for the threat boundaries and responsible reporting guidance.
+See `SECURITY.md`, `docs/ARCHITECTURE.md`, and `PROJECT_STATUS.md` for detailed boundaries and roadmap status.

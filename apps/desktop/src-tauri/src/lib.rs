@@ -1,44 +1,177 @@
-use std::fs;
+use std::{fs, path::PathBuf};
 
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
+mod ollama;
+mod runtime;
+mod setup;
+mod storage;
+mod verify;
+
+fn starter_workspace(default_workspace: &PathBuf) -> std::io::Result<()> {
+    fs::create_dir_all(default_workspace)?;
+    let empty = fs::read_dir(default_workspace)?.next().is_none();
+    if empty {
+        fs::write(
+            default_workspace.join("README.md"),
+            "# Welcome to Genesis\n\nThis is your starter workspace.\n\nUse **Ask Genesis** in the Workbench to inspect, plan, and propose changes. Generated changes still require explicit approval before they are applied.\n",
+        )?;
+    }
+    Ok(())
+}
+
+fn sqlite_database_url(path: &PathBuf) -> String {
+    format!(
+        "sqlite+aiosqlite:///{}",
+        path.to_string_lossy().replace('\\', "/")
+    )
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let installer_mode_at_launch = setup::installer_mode();
+    let runtime_info = runtime::RuntimeInfo::allocate()
+        .expect("could not initialize the private Genesis desktop runtime");
+
+    let mut builder = tauri::Builder::default();
+
+    // Keep the installer-owned setup process independent from an already-running normal
+    // Genesis instance. Normal launches are single-instance and focus the existing window.
+    #[cfg(desktop)]
+    if !installer_mode_at_launch {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }));
+    }
+
+    builder = builder
+        .manage(runtime_info)
+        .manage(runtime::SidecarState::default())
         .plugin(tauri_plugin_shell::init())
+        .invoke_handler(tauri::generate_handler![
+            runtime::runtime_info,
+            runtime::runtime_restart,
+            setup::setup_status,
+            setup::setup_choose_workspace,
+            setup::setup_install_ollama,
+            setup::setup_start_ollama,
+            setup::setup_pull_model,
+            ollama::setup_ollama_probe,
+            ollama::setup_ollama_start_existing,
+            ollama::setup_ollama_prepare_models,
+            setup::setup_validate_cloud,
+            setup::setup_save,
+            verify::setup_verify,
+            runtime::finish_setup_runtime,
+        ])
         .setup(|app| {
             #[cfg(desktop)]
             {
                 let app_data = app.path().app_local_data_dir()?;
-                let workspace = app_data.join("workspace");
-                fs::create_dir_all(&workspace)?;
+                let installer_mode = setup::installer_mode();
 
-                let sidecar = app
-                    .shell()
-                    .sidecar("genesis-server")?
-                    .env("WORKSPACE_ROOT", workspace.as_os_str())
-                    .env("SERVER_HOST", "127.0.0.1")
-                    .env("WEB_ORIGIN", "http://tauri.localhost");
-                let (mut events, child) = sidecar.spawn()?;
-                tauri::async_runtime::spawn(async move {
-                    let _child = child;
-                    while let Some(event) = events.recv().await {
-                        match event {
-                            CommandEvent::Stdout(bytes) => {
-                                println!("[genesis-server] {}", String::from_utf8_lossy(&bytes));
-                            }
-                            CommandEvent::Stderr(bytes) => {
-                                eprintln!("[genesis-server] {}", String::from_utf8_lossy(&bytes));
-                            }
-                            _ => {}
+                // A restore is staged by the authenticated packaged sidecar, then applied by
+                // Tauri only on the next normal launch before any process opens genesis.db.
+                if !installer_mode {
+                    match storage::apply_pending_restore(&app_data) {
+                        Ok(Some(safety)) => {
+                            println!("[genesis-storage] restore applied; safety backup: {}", safety.display());
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            eprintln!("[genesis-storage] restore not applied: {error}");
                         }
                     }
-                });
+                }
+
+                let default_workspace = app_data.join("workspace");
+                let database_path = app_data.join("genesis.db");
+                let database_url = sqlite_database_url(&database_path);
+                starter_workspace(&default_workspace)?;
+
+                let config = setup::load_config(app.handle());
+
+                // Upgrades should not force an already-configured user through setup again.
+                if installer_mode && config.complete {
+                    app.handle().exit(0);
+                    return Ok(());
+                }
+
+                if config.complete && !installer_mode {
+                    let configured_workspace = config
+                        .workspace
+                        .as_ref()
+                        .map(PathBuf::from)
+                        .filter(|path| path.is_dir())
+                        .unwrap_or_else(|| default_workspace.clone());
+                    let private_runtime = app.state::<runtime::RuntimeInfo>().inner().clone();
+
+                    let mut sidecar = app
+                        .shell()
+                        .sidecar("genesis-server")?
+                        .env("WORKSPACE_ROOT", configured_workspace.as_os_str())
+                        .env("DATABASE_URL", &database_url)
+                        .env("SERVER_HOST", "127.0.0.1")
+                        .env("SERVER_PORT", private_runtime.port.to_string())
+                        .env("GENESIS_API_TOKEN", &private_runtime.api_token)
+                        .env("WEB_ORIGIN", "http://tauri.localhost")
+                        .env("GENESIS_DEFAULT_PROVIDER", &config.provider);
+
+                    match config.provider.as_str() {
+                        "ollama" => {
+                            sidecar = sidecar.env("OLLAMA_CHAT_MODEL", &config.model);
+                        }
+                        "openai" => {
+                            sidecar = sidecar.env("OPENAI_MODEL", &config.model);
+                            if let Some(secret) = setup::load_secret("openai") {
+                                sidecar = sidecar.env("OPENAI_API_KEY", secret);
+                            }
+                        }
+                        "anthropic" => {
+                            sidecar = sidecar.env("ANTHROPIC_MODEL", &config.model);
+                            if let Some(secret) = setup::load_secret("anthropic") {
+                                sidecar = sidecar.env("ANTHROPIC_API_KEY", secret);
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    let (mut events, child) = sidecar.spawn()?;
+                    runtime::store_sidecar(app.state::<runtime::SidecarState>(), child);
+                    let app_handle = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        while let Some(event) = events.recv().await {
+                            match event {
+                                CommandEvent::Stdout(bytes) => {
+                                    println!("[genesis-server] {}", String::from_utf8_lossy(&bytes));
+                                }
+                                CommandEvent::Stderr(bytes) => {
+                                    eprintln!("[genesis-server] {}", String::from_utf8_lossy(&bytes));
+                                }
+                                CommandEvent::Terminated(payload) => {
+                                    println!("[genesis-server] exited with code {:?}", payload.code);
+                                    runtime::clear_sidecar(app_handle.state::<runtime::SidecarState>());
+                                }
+                                _ => {}
+                            }
+                        }
+                    });
+                }
             }
             Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running Genesis");
+        });
+
+    let app = builder
+        .build(tauri::generate_context!())
+        .expect("error while building Genesis");
+
+    app.run(|app_handle, event| match event {
+        RunEvent::ExitRequested { .. } | RunEvent::Exit => runtime::stop_sidecar(app_handle),
+        _ => {}
+    });
 }
