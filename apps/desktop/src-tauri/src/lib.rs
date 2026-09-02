@@ -18,6 +18,13 @@ fn starter_workspace(default_workspace: &PathBuf) -> std::io::Result<()> {
     Ok(())
 }
 
+fn sqlite_database_url(path: &PathBuf) -> String {
+    format!(
+        "sqlite+aiosqlite:///{}",
+        path.to_string_lossy().replace('\\', "/")
+    )
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -37,6 +44,8 @@ pub fn run() {
             {
                 let app_data = app.path().app_local_data_dir()?;
                 let default_workspace = app_data.join("workspace");
+                let database_path = app_data.join("genesis.db");
+                let database_url = sqlite_database_url(&database_path);
                 starter_workspace(&default_workspace)?;
 
                 let config = setup::load_config(app.handle());
@@ -60,6 +69,7 @@ pub fn run() {
                         .shell()
                         .sidecar("genesis-server")?
                         .env("WORKSPACE_ROOT", configured_workspace.as_os_str())
+                        .env("DATABASE_URL", &database_url)
                         .env("SERVER_HOST", "127.0.0.1")
                         .env("WEB_ORIGIN", "http://tauri.localhost")
                         .env("GENESIS_DEFAULT_PROVIDER", &config.provider);
