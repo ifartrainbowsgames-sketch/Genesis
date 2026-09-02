@@ -5,9 +5,11 @@ import re
 
 from ..schemas import AgentPlan, AgentPlanRequest, ChatMessage
 from .llm_router import router
+from .project_context import compact_summary
+
 
 SYSTEM = """You are the planning component of a user-controlled coding assistant.
-Convert the user's goal into a short, concrete execution plan.
+Convert the user's goal into a short, concrete execution plan grounded in the supplied Genesis project index.
 Do not claim actions have already happened.
 Only suggest tools from this allowlist when useful:
 - workspace.list
@@ -41,9 +43,10 @@ def _extract_json(text: str) -> dict:
 
 
 async def make_plan(request: AgentPlanRequest) -> AgentPlan:
+    project = compact_summary(request.task)
     messages = [
         ChatMessage(role="system", content=SYSTEM),
-        ChatMessage(role="user", content=request.task),
+        ChatMessage(role="user", content=f"TASK:\n{request.task}\n\nPROJECT INDEX:\n{project}"),
     ]
     _, content = await router.chat(request.provider, messages, request.model)
     data = _extract_json(content)
