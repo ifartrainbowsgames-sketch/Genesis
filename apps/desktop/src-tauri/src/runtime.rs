@@ -1,11 +1,7 @@
-use std::{
-    io,
-    net::TcpListener,
-    sync::Mutex,
-};
+use std::{net::TcpListener, sync::Mutex};
 
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_shell::process::CommandChild;
 
 use crate::setup;
@@ -89,8 +85,4 @@ pub fn setup_finish(app: AppHandle) -> Result<(), String> {
         app.request_restart();
     }
     Ok(())
-}
-
-pub fn io_error(message: impl Into<String>) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, message.into())
 }
