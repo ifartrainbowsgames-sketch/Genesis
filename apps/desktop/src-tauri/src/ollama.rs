@@ -103,8 +103,19 @@ async fn tags() -> Result<Vec<String>, String> {
     Ok(names)
 }
 
+fn canonical_model(name: &str) -> String {
+    let lower = name.trim().to_ascii_lowercase();
+    let tail = lower.rsplit('/').next().unwrap_or(&lower);
+    if tail.contains(':') {
+        lower
+    } else {
+        format!("{lower}:latest")
+    }
+}
+
 fn has_model(models: &[String], requested: &str) -> bool {
-    models.iter().any(|item| item.eq_ignore_ascii_case(requested))
+    let target = canonical_model(requested);
+    models.iter().any(|item| canonical_model(item) == target)
 }
 
 fn valid_model_name(model: &str) -> bool {
@@ -122,10 +133,12 @@ async fn running() -> bool {
 #[tauri::command]
 pub async fn setup_ollama_probe() -> OllamaProbe {
     let path = find_ollama();
-    let models = tags().await.unwrap_or_default();
+    let model_result = tags().await;
+    let running = model_result.is_ok();
+    let models = model_result.unwrap_or_default();
     OllamaProbe {
         installed: path.is_some(),
-        running: !models.is_empty() || running().await,
+        running,
         path: path.map(|value| value.to_string_lossy().to_string()),
         models,
     }
@@ -202,9 +215,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exact_model_match_is_case_insensitive() {
+    fn model_match_is_case_insensitive_and_understands_latest() {
         let models = vec!["qwen3:8b".to_string(), "nomic-embed-text:latest".to_string()];
         assert!(has_model(&models, "QWEN3:8B"));
+        assert!(has_model(&models, "nomic-embed-text"));
         assert!(!has_model(&models, "qwen3:4b"));
     }
 
