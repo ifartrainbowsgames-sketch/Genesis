@@ -44,7 +44,7 @@ pub fn run() {
 
                 // Upgrades should not force an already-configured user through setup again.
                 if installer_mode && config.complete {
-                    app.exit(0);
+                    app.handle().exit(0);
                     return Ok(());
                 }
 
