@@ -47,6 +47,10 @@ if (-not $TargetTriple) {
 
 New-Item -ItemType Directory -Force -Path $BinariesDir, $BuildDir, $WorkDir, $SpecDir | Out-Null
 
+# SQLAlchemy resolves async database dialects dynamically from the URL. PyInstaller's
+# static analysis cannot reliably see those imports, so collect them explicitly. The
+# desktop defaults to SQLite, while asyncpg remains available for explicitly configured
+# PostgreSQL deployments.
 & $Python -m PyInstaller `
     --clean `
     --noconfirm `
@@ -56,6 +60,9 @@ New-Item -ItemType Directory -Force -Path $BinariesDir, $BuildDir, $WorkDir, $Sp
     --workpath $WorkDir `
     --specpath $SpecDir `
     --paths $ServerDir `
+    --collect-submodules aiosqlite `
+    --hidden-import sqlalchemy.dialects.sqlite.aiosqlite `
+    --hidden-import sqlalchemy.dialects.postgresql.asyncpg `
     (Join-Path $ServerDir "sidecar_entry.py")
 
 $BuiltExe = Join-Path $BuildDir "genesis-server.exe"
