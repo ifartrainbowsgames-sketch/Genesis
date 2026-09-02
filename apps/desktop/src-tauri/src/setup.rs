@@ -13,6 +13,7 @@ use tauri::{AppHandle, Manager};
 const KEYRING_SERVICE: &str = "Genesis AI";
 const DEFAULT_OLLAMA_MODEL: &str = "qwen3:8b";
 const EMBEDDING_MODEL: &str = "nomic-embed-text";
+const OLLAMA_INSTALLER_URL: &str = "https://ollama.com/download/OllamaSetup.exe";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,6 +122,64 @@ async fn ollama_running() -> bool {
         .unwrap_or(false)
 }
 
+fn install_ollama_with_winget() -> Result<(), String> {
+    let output = Command::new("winget")
+        .args([
+            "install",
+            "--id",
+            "Ollama.Ollama",
+            "--exact",
+            "--silent",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("winget unavailable: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(format!("winget failed: {detail}"))
+    }
+}
+
+fn install_ollama_from_official_signed_installer() -> Result<(), String> {
+    let installer = env::temp_dir().join("Genesis-OllamaSetup.exe");
+    let download_and_verify = r#"
+$ErrorActionPreference = 'Stop'
+Invoke-WebRequest -UseBasicParsing 'https://ollama.com/download/OllamaSetup.exe' -OutFile $env:GENESIS_OLLAMA_INSTALLER
+$sig = Get-AuthenticodeSignature -LiteralPath $env:GENESIS_OLLAMA_INSTALLER
+if ($sig.Status -ne 'Valid') { throw ('Ollama installer signature is ' + $sig.Status) }
+"#;
+    let verified = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", download_and_verify])
+        .env("GENESIS_OLLAMA_INSTALLER", &installer)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("Could not launch PowerShell for Ollama download: {e}"))?;
+    if !verified.status.success() {
+        let _ = fs::remove_file(&installer);
+        let detail = String::from_utf8_lossy(&verified.stderr).trim().to_string();
+        return Err(format!("Official Ollama installer verification failed: {detail}"));
+    }
+
+    let installed = Command::new(&installer)
+        .args(["/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("Could not run the verified Ollama installer: {e}"));
+    let _ = fs::remove_file(&installer);
+    match installed {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("Verified Ollama installer exited with {status}")),
+        Err(error) => Err(error),
+    }
+}
+
 #[tauri::command]
 pub async fn setup_status(app: AppHandle) -> SetupStatus {
     let config = load_config(&app);
@@ -142,32 +201,22 @@ pub async fn setup_install_ollama() -> Result<String, String> {
     }
 
     let result = tauri::async_runtime::spawn_blocking(|| {
-        Command::new("winget")
-            .args([
-                "install",
-                "--id",
-                "Ollama.Ollama",
-                "--exact",
-                "--silent",
-                "--accept-package-agreements",
-                "--accept-source-agreements",
-            ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
+        install_ollama_with_winget().or_else(|winget_error| {
+            eprintln!("[genesis-setup] {winget_error}; trying the official signed installer");
+            install_ollama_from_official_signed_installer()
+        })
     })
     .await
-    .map_err(|e| e.to_string())?
-    .map_err(|_| "Windows Package Manager (winget) was not found. Install Ollama from ollama.com/download and click Check again.".to_string())?;
+    .map_err(|e| e.to_string())?;
+    result?;
 
-    if !result.status.success() {
-        let detail = String::from_utf8_lossy(&result.stderr).trim().to_string();
-        return Err(format!("Ollama installer failed: {detail}"));
+    for _ in 0..20 {
+        if let Some(path) = find_ollama() {
+            return Ok(format!("Ollama installed successfully at {}", path.display()));
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    if find_ollama().is_none() {
-        return Err("Ollama installation finished but the executable was not found yet. Wait a few seconds and click Check again.".into());
-    }
-    Ok("Ollama installed successfully.".into())
+    Err("Ollama installation completed, but Genesis could not locate ollama.exe yet. Relaunch Genesis Setup to retry detection.".into())
 }
 
 #[tauri::command]
