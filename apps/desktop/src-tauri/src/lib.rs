@@ -5,6 +5,7 @@ use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
 mod setup;
+mod verify;
 
 fn starter_workspace(default_workspace: &PathBuf) -> std::io::Result<()> {
     fs::create_dir_all(default_workspace)?;
@@ -37,6 +38,7 @@ pub fn run() {
             setup::setup_pull_model,
             setup::setup_validate_cloud,
             setup::setup_save,
+            verify::setup_verify,
             setup::setup_finish,
         ])
         .setup(|app| {
