@@ -218,3 +218,10 @@ jobs:
           $process = Start-Process -FilePath $installer.FullName -ArgumentList "/S" -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Silent installer exited with code $($process.ExitCode)" }
           Write-Host "NSIS installer built and silent install path completed successfully."
+      - name: Upload Genesis Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Genesis-Windows-Installer-0.10.0
+          path: apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 14
