@@ -10,6 +10,7 @@ type SetupStatus = {
   installerMode: boolean;
   provider: Provider;
   model: string;
+  workspace?: string | null;
   ollamaInstalled: boolean;
   ollamaRunning: boolean;
   embeddingModel: string;
@@ -76,12 +77,27 @@ export default function SetupPage() {
     if (next === "anthropic") setModel("claude-sonnet-5");
   }
 
+  async function chooseWorkspace() {
+    setBusy(true); setError("");
+    try {
+      const selected = await invoke<string | null>("setup_choose_workspace");
+      if (selected) {
+        log(`Project workspace selected: ${selected}`);
+        await refresh();
+      }
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function prepareLocal() {
     setBusy(true); setError(""); setReady(false); setProgress([]);
     try {
       let current = await invoke<SetupStatus>("setup_status");
       if (!current.ollamaInstalled) {
-        log("Installing Ollama through Windows Package Manager…");
+        log("Installing Ollama automatically…");
         log(await invoke<string>("setup_install_ollama"));
       } else {
         log("Ollama installation detected.");
@@ -144,7 +160,7 @@ export default function SetupPage() {
             <div>
               <div className={styles.kicker}>Genesis 0.10 · One-click setup</div>
               <h1>Choose the brain for your Workbench.</h1>
-              <p>Genesis verifies your AI provider before the installer finishes. Local mode installs and starts Ollama for you. Cloud mode validates your API key and keeps it in the Windows credential vault.</p>
+              <p>Genesis verifies your AI provider and lets you choose the project folder before installation finishes. Local mode installs and starts Ollama for you. Cloud mode validates your API key and keeps it in the Windows credential vault.</p>
             </div>
             <div className={styles.step}>{status?.installerMode ? "Installer setup" : "First-run setup"}</div>
           </header>
@@ -178,7 +194,7 @@ export default function SetupPage() {
                     </button>
                   ))}
                 </div>
-                <p className={styles.note}>Genesis also installs the {status?.embeddingModel ?? "nomic-embed-text"} embedding model for memory. Model download time depends on your connection and hardware.</p>
+                <p className={styles.note}>Genesis also prepares the {status?.embeddingModel ?? "nomic-embed-text"} embedding model for memory. Model download time depends on your connection and hardware.</p>
               </div>
             ) : (
               <div className={styles.section}>
@@ -199,12 +215,24 @@ export default function SetupPage() {
               </div>
             )}
 
+            <div className={styles.section}>
+              <div className={styles.sectionTitle}>
+                <strong>2. Project workspace</strong>
+                <span className={`${styles.status} ${status?.workspace ? styles.good : ""}`}>{status?.workspace ? "Project selected" : "Starter workspace"}</span>
+              </div>
+              <div className={styles.row}>
+                <button className={styles.button} onClick={() => void chooseWorkspace()} disabled={busy}>Choose project folder…</button>
+                <span className={styles.status}>{status?.workspace ?? "Genesis will create a small starter workspace so Workbench is not empty."}</span>
+              </div>
+              <p className={styles.note}>The folder picker is native to Windows. Genesis stores only the selected path and opens the sidecar inside that exact project folder.</p>
+            </div>
+
             {progress.length ? <div className={styles.progress}>{progress.join("\n")}</div> : null}
             {error ? <div className={styles.error}>{error}</div> : null}
             {ready ? <div className={styles.ready}>Setup checks are green. Workbench can start.</div> : null}
 
             <div className={styles.actions}>
-              <span className={styles.note}>No workspace mutation or external worker is enabled by this step. Those still use Genesis approval gates.</span>
+              <span className={styles.note}>No project mutation or external worker is enabled by setup. Those still use Genesis approval gates.</span>
               <div className={styles.row}>
                 <button className={styles.button} onClick={() => void refresh()} disabled={busy}>Check again</button>
                 {!ready ? (
