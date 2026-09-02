@@ -99,7 +99,7 @@ jobs:
       - name: Build packaged FastAPI sidecar
         shell: pwsh
         run: ./scripts/build-sidecar.ps1 -SkipInstall
-      - name: Launch packaged sidecar with embedded database
+      - name: Launch packaged sidecar with private desktop runtime
         shell: pwsh
         run: |
           $databasePath = Join-Path $env:RUNNER_TEMP "genesis-desktop-ci.db"
@@ -108,9 +108,21 @@ jobs:
           $stderrPath = Join-Path $env:RUNNER_TEMP "genesis-sidecar-stderr.log"
           Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
 
+          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+          $listener.Start()
+          $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+          $listener.Stop()
+          if ($port -eq 8000) { throw "CI unexpectedly selected the legacy desktop port 8000" }
+
+          $apiBase = "http://127.0.0.1:$port"
+          $token = "ci-genesis-private-runtime-token"
+          $authorized = @{ "X-Genesis-Token" = $token }
+
           $env:DATABASE_URL = "sqlite+aiosqlite:///$databaseUrlPath"
           $env:SCHEDULER_ENABLED = "false"
           $env:SERVER_HOST = "127.0.0.1"
+          $env:SERVER_PORT = "$port"
+          $env:GENESIS_API_TOKEN = $token
           $env:WEB_ORIGIN = "http://tauri.localhost"
           $env:GENESIS_DEFAULT_PROVIDER = "openai"
           $env:OPENAI_API_KEY = "ci-placeholder-key-not-used-for-network"
@@ -130,7 +142,7 @@ jobs:
               $process.Refresh()
               if ($process.HasExited) { break }
               try {
-                $health = Invoke-RestMethod -Uri "http://127.0.0.1:8000/health" -TimeoutSec 1
+                $health = Invoke-RestMethod -Uri "$apiBase/health" -TimeoutSec 1
                 if ($health.status -eq "ok") {
                   $ready = $true
                   break
@@ -145,30 +157,45 @@ jobs:
               Write-Host "--- Genesis sidecar stderr ---"
               if (Test-Path $stderrPath) { Get-Content $stderrPath }
               $exitDetail = if ($process.HasExited) { "exit code $($process.ExitCode)" } else { "still running" }
-              throw "Packaged Genesis sidecar did not become healthy ($exitDetail)"
+              throw "Packaged Genesis sidecar did not become healthy on $apiBase ($exitDetail)"
             }
 
-            $system = Invoke-RestMethod -Uri "http://127.0.0.1:8000/v1/system/health" -TimeoutSec 10
+            $missing = Invoke-WebRequest -Uri "$apiBase/v1/tasks" -SkipHttpErrorCheck -TimeoutSec 5
+            if ($missing.StatusCode -ne 401) {
+              throw "Desktop API accepted /v1/tasks without the launch token (HTTP $($missing.StatusCode))"
+            }
+
+            $wrong = Invoke-WebRequest `
+              -Uri "$apiBase/v1/tasks" `
+              -Headers @{ "X-Genesis-Token" = "wrong-token" } `
+              -SkipHttpErrorCheck `
+              -TimeoutSec 5
+            if ($wrong.StatusCode -ne 401) {
+              throw "Desktop API accepted an incorrect launch token (HTTP $($wrong.StatusCode))"
+            }
+
+            $system = Invoke-RestMethod -Uri "$apiBase/v1/system/health" -Headers $authorized -TimeoutSec 10
             if ($system.status -ne "ready") { throw "Packaged Genesis system health was $($system.status)" }
             if ($system.components.database.status -ne "ready") { throw "Embedded database was not ready" }
             if ($system.components.database.backend -ne "sqlite") { throw "Desktop sidecar did not use SQLite" }
             if ($system.components.ai_provider.provider -ne "openai") { throw "Selected provider health was not respected" }
             if (-not (Test-Path $databasePath)) { throw "Embedded SQLite database file was not created" }
 
-            Invoke-RestMethod -Uri "http://127.0.0.1:8000/v1/tasks" -TimeoutSec 5 | Out-Null
+            Invoke-RestMethod -Uri "$apiBase/v1/tasks" -Headers $authorized -TimeoutSec 5 | Out-Null
 
             $preflight = Invoke-WebRequest `
-              -Uri "http://127.0.0.1:8000/health" `
+              -Uri "$apiBase/v1/tasks" `
               -Method Options `
               -Headers @{
                 Origin = "http://tauri.localhost"
                 "Access-Control-Request-Method" = "GET"
+                "Access-Control-Request-Headers" = "X-Genesis-Token"
               } `
               -TimeoutSec 5
             if ($preflight.Headers["Access-Control-Allow-Origin"] -ne "http://tauri.localhost") {
               throw "Packaged sidecar did not allow the Tauri production origin"
             }
-            Write-Host "Packaged desktop API, embedded SQLite, provider health, and CORS checks passed."
+            Write-Host "Packaged desktop dynamic port, private token boundary, embedded SQLite, provider health, and CORS checks passed."
           } finally {
             if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
