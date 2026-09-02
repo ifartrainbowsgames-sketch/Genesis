@@ -4,156 +4,158 @@ Genesis 0.10 extends the completed **5A → 5B → 5C → 6 → 7 → 8** conver
 
 ## Phase 5A — reliability foundation: DONE / MERGED
 
-- [x] Real pytest suite instead of import-only confidence
-- [x] Approval single-use/expiry tests
-- [x] Workspace traversal/write boundary tests
-- [x] Planner parsing tests
-- [x] Ollama embedding fallback regression coverage and production fix
-- [x] Restricted project-command tests
-- [x] GitHub SHA-safe replacement tests
-- [x] MCP/research validation tests
-- [x] Modernized/deduplicated GitHub Actions
-- [x] Windows desktop icon/package defect fixed
+- [x] Real pytest suite and authority-boundary regressions
+- [x] Ollama embedding fallback production fix + coverage
+- [x] Modern GitHub Actions and Windows package checks
 
 ## Phase 5B — Workbench: DONE
 
-- [x] Filtered workspace Explorer
-- [x] Monaco code editor
-- [x] Approval-gated saves
-- [x] Git status/diff panel
-- [x] Restricted project-check selector
-- [x] Output-only xterm check surface
-- [x] Runtime task/worker panel
-- [x] Non-Git workspaces degrade gracefully
-- [x] Read-only tool endpoint rejects mutating tools
-- [x] Bounded “Ask Genesis” team control directly in Workbench
+- [x] Filtered Explorer + Monaco editor
+- [x] Approval-gated saves and fixed project checks
+- [x] Git status/diff + output-only xterm
+- [x] Task/worker history
+- [x] Project snapshot on first open
+- [x] Real Plan / Build / Fix / Review AI modes
+  - Plan uses the planner only
+  - Build uses the bounded coding team
+  - Fix constrains the bounded team to minimal repair
+  - Review is read-only against the current Git diff
 
-## Phase 5C — durable runtime and external workers: DONE
+## Phase 5C — durable runtime and workers: DONE
 
-- [x] Persistent task ledger
-- [x] Immutable `team_request` replay artifact
-- [x] Ordered persistent run-event log
-- [x] Task detail API with artifacts/events
-- [x] Retry with `retry_of` lineage
-- [x] Durable PostgreSQL interval schedules
-- [x] `FOR UPDATE SKIP LOCKED` schedule claiming
-- [x] Advance `next_run_at` before execution to avoid duplicate slow-run pickup
-- [x] Runtime UI for tasks/events/retries/schedules/workers
-- [x] Unified worker registry
-- [x] Built-in bounded Genesis team worker
-- [x] Fixed-argv command worker adapter
-- [x] Allowlisted HTTP worker adapter
-- [x] External workers execute only through approval-gated `worker.run`
-- [x] Direct external-worker execution bypass closed by regression coverage
-- [x] Scheduled team runs still stop before workspace mutation
+- [x] Persistent task ledger, artifacts, events, retries
+- [x] Durable schedules
+- [x] PostgreSQL multi-process claiming with `SKIP LOCKED`
+- [x] SQLite single-sidecar claim lock
+- [x] Built-in team + allowlisted external workers
+- [x] External execution remains approval-gated
 
 ## Phase 6 — cognitive/project memory V1: DONE
 
-- [x] Raw episodic conversation records preserved
-- [x] Separate cognitive-memory table
-- [x] Semantic conversation summaries
-- [x] Procedural/user-constraint extraction
-- [x] Source-record lineage retained
-- [x] Confidence + optional pgvector embedding
-- [x] Cognitive + episodic retrieval injected into chat
-- [x] Separate Memory UI layers
-- [x] User-triggered consolidation/search
+- [x] Episodic + separate cognitive memory
+- [x] Semantic summaries + procedural constraints
+- [x] Source lineage and confidence
+- [x] PostgreSQL pgvector ranking
+- [x] Embedded SQLite vector storage + bounded in-process cosine ranking
+- [x] Text fallback when embeddings are unavailable
 
-## Phase 7 — evaluation and evolution V1: DONE
+## Phase 7 — evaluation/evolution V1: DONE
 
-- [x] Bounded prompt variant generation
-- [x] Bounded evaluation cases
-- [x] Baseline/candidate execution through selected provider
-- [x] Deterministic expected/forbidden-string gates
-- [x] Per-case results + latency capture
-- [x] Candidate/evaluation history in PostgreSQL
-- [x] Shadow status by default
-- [x] Manual promotion only
-- [x] Promotion requires all deterministic cases to pass and meet/beat baseline
-- [x] Manual rollback by re-promoting a prior passing candidate
+- [x] Bounded variants/cases
+- [x] Baseline/candidate execution
+- [x] Deterministic gates + history
+- [x] Shadow-first candidates
+- [x] Explicit manual promotion/rollback only
 
 ## Phase 8 — production/release hardening: DONE FOR UNSIGNED RELEASES
 
-- [x] Server compile + pytest
-- [x] Real PostgreSQL + pgvector CI service
-- [x] Database integration coverage
-- [x] Web production/static-export build gate
-- [x] Windows PyInstaller sidecar packaging gate
-- [x] Packaged sidecar launch + `/health` and Tauri-origin CORS smoke gate
+- [x] Server + real PostgreSQL/pgvector CI
+- [x] Web production build
+- [x] Windows packaged sidecar runtime/CORS test
 - [x] Tauri/Rust compile gate
 - [x] Doctor/startup diagnostics
-- [x] Tag-triggered GitHub Release workflow
+- [x] Tag-triggered release workflow
 - [x] Security/architecture/status documentation
-- [ ] Authenticode signing — requires a real signing identity/certificate supplied as release secrets
+- [ ] Authenticode signing — requires a real certificate/identity in release secrets
 
-## Phase 9 — One-Click Genesis installer: IMPLEMENTED / CI GATED
+## Phase 9 — One-Click Genesis: IMPLEMENTED / FINAL CI REQUIRED
 
 ### Installer-owned setup
 
-- [x] Windows bundle target narrowed to a real NSIS setup executable
-- [x] NSIS post-install hook launches `Genesis.exe --installer-setup`
-- [x] Installer waits for the Genesis setup window before completing
-- [x] Successful interactive setup immediately launches the configured desktop app
-- [x] Silent `/S` install remains non-interactive and defers setup to first launch
-- [x] Existing configured installations skip the setup wizard during upgrades
-- [x] Desktop launch is gated until setup is complete
-- [x] Desktop startup waits for local sidecar health
-- [x] First successful desktop startup lands directly in `/workbench`
+- [x] Real Windows NSIS setup target
+- [x] NSIS launches `Genesis.exe --installer-setup` and waits
+- [x] Silent `/S` install stays non-interactive
+- [x] Existing configured upgrades skip forced interactive setup
+- [x] Desktop startup verifies setup before Workbench
+- [x] Healthy startup waits for sidecar then lands directly in `/workbench`
+- [x] Unhealthy startup routes into First-run / Repair
 
-### Local AI path
+### No hidden desktop database prerequisite
 
-- [x] Detect existing Ollama installation
-- [x] Detect whether Ollama API is already running
-- [x] Preferred automatic install through fixed `winget` arguments
-- [x] Fallback to official `OllamaSetup.exe` when winget is unavailable/fails
-- [x] Fallback installer Authenticode signature must validate before execution
-- [x] Silent Ollama installer arguments are fixed by Genesis
-- [x] Start `ollama serve` automatically when needed
-- [x] Curated local model selector
-- [x] Pull selected chat model
-- [x] Pull `nomic-embed-text` for local memory embeddings
-- [x] Setup does not become complete until the model preparation succeeds
+- [x] Installed desktop uses private app-data `genesis.db`
+- [x] `aiosqlite` packaged with FastAPI sidecar
+- [x] SQLAlchemy models support PostgreSQL + SQLite
+- [x] PostgreSQL retains native pgvector
+- [x] SQLite stores embedding arrays as JSON and cosine-ranks a bounded local candidate set
+- [x] Tasks/events/schedules/memory/evolution persist without Docker/PostgreSQL
+- [x] CI has a separate embedded SQLite schema/vector-storage smoke test
+- [x] Packaged Windows sidecar CI uses the embedded database path
 
-### Cloud AI path
+### Hardware-aware local AI
 
-- [x] OpenAI option
-- [x] Anthropic option
-- [x] API key is validated before setup completes
-- [x] Secret stored through the operating-system credential store
-- [x] `setup.json` stores provider/model choice only, never the API key
-- [x] Desktop sidecar receives the stored key only as a process environment variable
+- [x] Detect total RAM
+- [x] Detect free system-drive space
+- [x] Report GPU name without pretending it guarantees model speed
+- [x] Conservative automatic model recommendation
+- [x] Curated stable-model list: `qwen3:4b`, `qwen3:8b`, `gpt-oss:20b`, `qwen3-coder:30b`
+- [x] Detect/install/start Ollama
+- [x] Fixed `winget` installation path
+- [x] Verified official signed Ollama installer fallback
+- [x] Pull selected chat model + `nomic-embed-text`
+
+### Cloud AI
+
+- [x] OpenAI + Anthropic choices
+- [x] Current explicit model choices
+- [x] Validate credential **and exact selected model access** before saving
+- [x] Store secret in Windows credential store
+- [x] Persist only non-secret provider/model configuration
+
+### Native setup verification / repair
+
+- [x] Genesis app-data write probe
+- [x] Setup configuration check
+- [x] Read-only selected-workspace check
+- [x] Ollama service + selected model + embedding-model verification
+- [x] Secure cloud credential presence check
+- [x] `Finish installation` gated on all required checks being green
+- [x] Same verifier reused on normal desktop startup
+- [x] Repair flow does not write probe files into the selected project
 
 ### Workbench readiness
 
-- [x] Installer-selected provider/model becomes the server default
-- [x] Workbench “Ask Genesis” uses the installer-selected provider automatically
-- [x] AI-generated changes remain proposals; Phase 9 creates no mutation bypass
-- [x] Startup failure offers Diagnostics/retry rather than exposing a half-ready Workbench
+- [x] Installer-selected provider/model becomes sidecar default
+- [x] Ask Genesis uses installer-selected AI automatically
+- [x] Project snapshot appears immediately
+- [x] Plan / Build / Fix / Review map to concrete bounded/read-only workflows
+- [x] Generated changes remain proposals; no mutation bypass
 
-### Phase 9 CI gate
+### Final Phase 9 CI gate
 
-- [x] Existing server + pgvector suite retained
-- [x] Existing web production build retained
-- [x] Existing packaged sidecar runtime test retained
-- [x] Rust/Tauri setup bridge compile gate
-- [x] CI builds the actual NSIS installer
-- [x] CI executes the silent NSIS install path to ensure packaging/install does not hang or fail
+The exact merge head must pass all of these before PR #3 is merged:
 
-Phase 9 is merge-ready only when the exact PR head is green on all three jobs, including the real NSIS bundle/install step.
+- [ ] Server pytest against real PostgreSQL + pgvector
+- [ ] Embedded SQLite server smoke
+- [ ] Web production build
+- [ ] Packaged Windows sidecar with embedded SQLite
+- [ ] Selected-provider system-health check
+- [ ] Tauri-origin CORS check
+- [ ] Rust/Tauri native setup compile
+- [ ] Actual NSIS installer build
+- [ ] Silent NSIS installation smoke test
+
+These boxes are intentionally not pre-checked: they describe the **final exact-head validation**, not merely implemented workflow steps.
+
+## Deliberately deferred / external release requirement
+
+- [ ] Authenticode signing certificate/identity
+- [ ] Signed automatic-update verification path
+
+Genesis will not ship an unsigned self-updater merely to claim automatic updates. Release checking/manual installation is safer until updates can be cryptographically verified.
 
 ## Safety invariants
 
 - No unrestricted shell tool.
-- Local paths cannot escape the selected workspace.
+- Local API binds to loopback by default.
+- Workspace paths remain bounded.
 - Mutating tools require short-lived single-use approval tokens.
-- Exact approved tool arguments are stored server-side and reused at execution.
-- External workers remain server-side allowlisted and approval-gated.
-- Command workers use fixed argv and no shell.
-- Installer setup uses fixed provider-install commands; API keys never enter repository configuration.
-- Downloaded Ollama fallback installer must pass Windows Authenticode verification before execution.
-- Team runs and schedules remain bounded and stop before workspace mutation.
-- Evolution candidates never auto-promote.
+- External workers remain allowlisted + approval-gated.
+- Fixed project checks and fixed installer commands do not interpolate model/user text into a shell.
+- Installer cloud credentials stay out of repository configuration.
+- Downloaded Ollama fallback must pass Authenticode verification before execution.
+- Team runs/schedules remain bounded and stop before workspace mutation.
+- Evolution never auto-promotes.
 
-## Remaining non-code release requirement
+## Merge condition
 
-A public production installer can be built and tested without a certificate, but a genuinely trusted Windows release still needs a real Authenticode signing certificate/identity configured in release secrets.
+PR #3 is merge-ready only after the **exact final head** passes all three GitHub Actions jobs, including the actual NSIS bundle and silent installation step. After merge, `v0.10.0` can build/publish the Windows release. A publicly trusted signed installer still requires a real signing identity.
