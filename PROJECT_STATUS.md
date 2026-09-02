@@ -1,129 +1,137 @@
 # Genesis project status
 
-Genesis 0.9 is the convergence release: the original workstation foundation plus the Workbench, durable runtime, cognitive memory, external-worker boundary, shadow evolution, stronger CI, Doctor diagnostics, and versioned desktop artifact workflow.
+Genesis 0.9 preserves the roadmap explicitly as **5A → 5B → 5C → 6 → 7 → 8**. Earlier foundation/integration/team work remains complete; this file focuses on the convergence roadmap.
 
-## Phase 1 — foundation: DONE
+## Phase 5A — reliability foundation: DONE / MERGED
 
-- [x] Monorepo layout
-- [x] FastAPI API
-- [x] Ollama adapter
-- [x] OpenAI Responses API adapter
-- [x] Anthropic Messages API adapter
-- [x] PostgreSQL + pgvector memory
-- [x] Structured agent planner
-- [x] Approval tokens
-- [x] Sandboxed workspace tools
-- [x] Next.js control surface
-- [x] Tauri desktop shell
-- [x] Windows setup/start/Doctor scripts
+- [x] Real pytest suite instead of import-only confidence
+- [x] Approval single-use/expiry tests
+- [x] Workspace traversal/write boundary tests
+- [x] Planner parsing tests
+- [x] Ollama embedding fallback regression coverage and production fix
+- [x] Restricted project-command tests
+- [x] GitHub SHA-safe replacement tests
+- [x] MCP/research validation tests
+- [x] Modernized/deduplicated GitHub Actions
+- [x] Windows desktop icon/package defect fixed
 
-## Phase 2 — coding workstation: DONE
+Phase 5A was merged to `main` before the 0.9 convergence branch.
 
-- [x] Git status/diff tools
-- [x] Multi-file change preview and approval
-- [x] Restricted fixed-command test/build runner
-- [x] Repository selector restricted to configured roots
-- [x] Streaming chat
-- [x] Workbench route with filtered Explorer
-- [x] Monaco editor
-- [x] Output-only xterm check console (`stdin` disabled)
-- [x] Git diff/status panel
-- [x] Task/worker side panel
-- [x] Workbench saves and checks use proposal -> single-use approval -> execution
-- [x] Read-only tool endpoint refuses mutating tools
+## Phase 5B — Workbench: DONE FOR 0.9
 
-## Phase 3 — integrations and workers: DONE FOR V1
+- [x] Filtered workspace Explorer
+- [x] Monaco code editor
+- [x] Approval-gated saves
+- [x] Git status/diff panel
+- [x] Restricted project-check selector
+- [x] xterm check-output surface
+- [x] xterm stdin disabled; not a general shell
+- [x] Runtime task/worker side panel
+- [x] Non-Git workspaces degrade gracefully
+- [x] Read-only tool endpoint rejects mutating tools
 
-- [x] Approval-gated GitHub repository adapter
-- [x] SHA-safe GitHub file update protection
-- [x] MCP Python SDK v2 client
-- [x] Allowlisted Streamable HTTP MCP registry
-- [x] Source-tracked SearXNG research broker
-- [x] Local whisper.cpp speech-to-text path
-- [x] Unified worker registry
-- [x] Built-in bounded Genesis team worker
-- [x] Fixed-argv command worker adapter with `shell=False`
-- [x] Allowlisted HTTP worker adapter
-- [x] External workers execute only through approval-gated `worker.run`
-- [x] Direct external-worker endpoint bypass closed by regression test
+## Phase 5C — durable runtime and external workers: DONE FOR 0.9
 
-External products such as Claude Code, Codex, OpenHands, or Wayland can be connected through an explicitly configured command or HTTP adapter. Genesis does not auto-discover or launch arbitrary executables.
-
-## Phase 4 — durable multi-agent runtime: DONE FOR V1
-
-- [x] Architect / optional Researcher / Builder / Reviewer artifact handoffs
-- [x] Hard 1–4 model-call budget
 - [x] Persistent task ledger
 - [x] Immutable `team_request` replay artifact
 - [x] Ordered persistent run-event log
-- [x] Task detail API with artifacts + events
-- [x] Retry with lineage (`retry_of` artifact)
-- [x] Durable interval schedules in PostgreSQL
-- [x] Schedule locking with `FOR UPDATE SKIP LOCKED`
-- [x] Schedule pickup advances `next_run_at` before execution to avoid duplicate slow-run pickup
-- [x] Runtime UI for tasks, event history, retries, workers, and schedules
+- [x] Task detail API with artifacts/events
+- [x] Retry with `retry_of` lineage
+- [x] Durable PostgreSQL interval schedules
+- [x] `FOR UPDATE SKIP LOCKED` schedule claiming
+- [x] Advance `next_run_at` before execution to avoid duplicate slow-run pickup
+- [x] Runtime UI for tasks/events/retries/schedules/workers
+- [x] Unified worker registry
+- [x] Built-in bounded Genesis team worker
+- [x] Fixed-argv command worker adapter using `create_subprocess_exec`
+- [x] Allowlisted HTTP worker adapter
+- [x] External workers execute only through approval-gated `worker.run`
+- [x] Direct external-worker execution bypass closed by regression coverage
 - [x] Scheduled team runs still stop before workspace mutation
 
-## Phase 5 — cognitive memory: DONE FOR V1
+## Phase 6 — cognitive/project memory V1: DONE
 
-- [x] Episodic conversation records retained unchanged
+- [x] Raw episodic conversation records preserved
 - [x] Separate cognitive-memory table
 - [x] Semantic conversation summaries
 - [x] Procedural/user-constraint extraction
-- [x] Source record IDs retained on consolidated memory
-- [x] Confidence + embeddings on cognitive items
-- [x] Cognitive memory search is injected beside episodic retrieval in chat
-- [x] Memory UI shows episodic and cognitive layers separately
-- [x] User-triggered consolidation and search
+- [x] Source-record lineage retained
+- [x] Confidence + optional pgvector embedding
+- [x] Cognitive + episodic retrieval injected into chat
+- [x] Separate Memory UI layers
+- [x] User-triggered consolidation/search
 
-The first consolidation algorithm is deliberately deterministic and inspectable. It does not delete or rewrite the source episodes.
+The V1 consolidator is deterministic and inspectable. It does not delete or rewrite source episodes.
 
-## Phase 6 — evolution V1: DONE
+## Phase 7 — evaluation and evolution V1: DONE
 
-- [x] Bounded prompt variant generation (maximum 3 per run)
-- [x] Bounded evaluation cases (maximum 10 per run)
-- [x] Baseline and candidate execution through the selected model provider
-- [x] Deterministic expected/forbidden substring gate before any promotion
-- [x] Per-case results and latency captured
-- [x] Candidate/eval history stored in PostgreSQL
+- [x] Bounded prompt variant generation (maximum 3)
+- [x] Bounded evaluation cases (maximum 10)
+- [x] Baseline and candidate execution through the selected provider
+- [x] Deterministic expected/forbidden-string gates
+- [x] Per-case results + latency capture
+- [x] Candidate/evaluation history in PostgreSQL
 - [x] Shadow status by default
 - [x] Manual promotion only
-- [x] Promotion requires every deterministic case to pass and candidate score to meet/beat baseline
-- [x] Prior promoted candidate can be re-promoted later, providing a manual rollback path
-- [x] Evolution UI exposes scores, baseline, failures, and promotion gate
+- [x] Promotion requires all deterministic cases to pass and score to meet/beat baseline
+- [x] Prior passing candidates can be promoted again for manual rollback
+- [x] Evolution UI exposes baseline, scores, failures, and promotion controls
 
-Evolution V1 intentionally does **not** autonomously rewrite live code, prompts, or configuration. Promotion records a reviewed winning prompt version; applying evolved behavior to additional runtime surfaces remains an explicit product decision.
+Evolution V1 intentionally does not autonomously rewrite live code, prompts, or configuration.
 
-## Phase 7 — test and release hardening: DONE EXCEPT SIGNING / FULL EXTERNAL-SERVICE E2E
+## Phase 8 — production/release hardening: COMPLETE FOR UNSIGNED 0.9 RELEASE CANDIDATE
 
-- [x] 42-test Phase 5A safety baseline established before the 0.9 work
-- [x] Regression coverage for approval, workspace, planner, memory fallback, GitHub SHA safety, MCP, research, and restricted checks
-- [x] New worker/evolution/cognitive-memory authority tests
-- [x] PostgreSQL + pgvector service added to server CI
-- [x] Database integration coverage for task events, artifacts, cognitive consolidation, and schedules
-- [x] Web production build gate
-- [x] Windows PyInstaller FastAPI sidecar packaging gate
-- [x] Windows Tauri/Rust compile gate
-- [x] Current GitHub Actions majors and deduplicated PR CI
-- [x] Versioned tag-triggered Windows bundle artifact workflow
-- [x] Doctor script + in-app dependency diagnostics
-- [ ] Windows Authenticode/installer signing — requires a real signing certificate/identity secret
-- [ ] Full packaged-desktop E2E with real Ollama + SearXNG + optional whisper.cpp on the Windows runner
+### Test gates
+
+- [x] Server compile + pytest
+- [x] Real PostgreSQL + pgvector service in CI
+- [x] Database integration coverage for task events/artifacts/cognitive memory/schedules
+- [x] Web production/static-export build gate
+- [x] Windows PyInstaller sidecar packaging gate
+- [x] Packaged Windows sidecar launch + `/health` runtime smoke gate
+- [x] Tauri/Rust compile gate
+- [x] Current GitHub Actions majors
+- [x] PR CI deduplicated with concurrency cancellation
+
+### Startup / Doctor
+
+- [x] `scripts/doctor.ps1` prerequisite + live-health diagnostics
+- [x] Expanded in-app Diagnostics for workers/scheduler/cognitive memory/evolution
+- [x] `scripts/start.ps1` can start PostgreSQL/pgvector + SearXNG, check Ollama, launch API/web, and verify API readiness
+- [x] Clear degraded behavior when optional/local dependencies are unavailable
+
+### Release
+
+- [x] Workspace/web/desktop/runtime versions aligned to 0.9.0
+- [x] Tag-triggered Windows bundle workflow
+- [x] Workflow artifact upload
+- [x] GitHub Release creation and bundle upload on `v*` tags
+- [x] README updated for 0.9
+- [x] Security boundaries documented in `SECURITY.md`
+- [x] Architecture/status truth pass
+- [ ] Authenticode/installer signing — requires a real signing certificate/identity supplied as release secrets
+
+### External-service E2E still optional, not a merge blocker
+
+- [ ] Full Windows runner E2E using a real Ollama model download
+- [ ] Full SearXNG live-query E2E
+- [ ] whisper.cpp live transcription E2E
+
+Those tests are intentionally not fabricated: they require expensive external downloads/services. The packaged sidecar itself is launched and health-checked in CI.
 
 ## Safety invariants
 
 - No unrestricted shell tool.
 - Local paths cannot escape the selected workspace.
-- Recursive Explorer scans skip `.git`, dependency, build, and cache trees.
-- Mutating registered tools require short-lived single-use approval tokens.
+- Recursive Explorer scans skip VCS, dependency, build, virtualenv, target, and cache trees.
+- Mutating tools require short-lived single-use approval tokens.
+- Exact approved tool arguments are stored server-side and reused at execution.
 - External workers are server-side allowlisted and approval-gated.
-- Command workers use fixed argv and `create_subprocess_exec`, not a shell.
-- Team runs and schedules are bounded and stop before applying workspace changes.
+- Command workers use fixed argv and no shell.
+- Team runs and schedules are bounded and stop before applying workspace mutations.
 - Evolution candidates never auto-promote.
-- Cloud providers are optional.
+- Cloud providers remain optional.
 
-## Remaining release blockers that cannot be fabricated in source control
+## Final release condition
 
-1. Supply a real Windows signing identity/certificate and wire its secrets into the release environment.
-2. Decide which external workers should be officially supported/configured by default; the runtime adapter is intentionally generic and allowlist-only.
-3. Add expensive full external-service E2E runners when stable test credentials/models are available.
+Genesis 0.9 is ready to merge when PR #2 is green on **server + PostgreSQL/pgvector, web build, packaged Windows sidecar runtime, and Tauri compile**. After merge, a `v0.9.0` tag can build and publish the Windows release artifacts. Genuine Windows signing remains dependent on a real certificate.
