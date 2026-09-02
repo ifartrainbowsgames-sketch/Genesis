@@ -27,7 +27,15 @@ pub fn run() {
                 fs::create_dir_all(&workspace)?;
 
                 let config = setup::load_config(app.handle());
-                if config.complete && !setup::installer_mode() {
+                let installer_mode = setup::installer_mode();
+
+                // Upgrades should not force an already-configured user through setup again.
+                if installer_mode && config.complete {
+                    app.exit(0);
+                    return Ok(());
+                }
+
+                if config.complete && !installer_mode {
                     let mut sidecar = app
                         .shell()
                         .sidecar("genesis-server")?
