@@ -61,7 +61,7 @@
 .feed {
   width: min(900px, 100%);
   margin: 0 auto;
-  padding: 34px 24px 160px;
+  padding: 34px 24px 240px;
   overflow-y: auto;
 }
 
@@ -145,6 +145,115 @@
   color: #efaaaa;
   background: rgba(132, 35, 35, .12);
   font-size: 12px;
+}
+
+.proposal {
+  margin-top: 14px;
+  border: 1px solid #29343c;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0c1115;
+}
+
+.proposalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.proposalHeader strong {
+  font-size: 11px;
+}
+
+.proposalHeader span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.fileList {
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.fileRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 11px;
+  border-bottom: 1px solid rgba(255,255,255,.04);
+  color: #cbd4da;
+  font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.fileRow:last-child {
+  border-bottom: 0;
+}
+
+.fileRow span:last-child {
+  color: var(--muted);
+}
+
+.proposalActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: 9px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.actionButton,
+.dangerButton {
+  min-height: 31px;
+  border: 1px solid #34414a;
+  border-radius: 7px;
+  padding: 0 10px;
+  color: #dce4e9;
+  background: #151d23;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.dangerButton {
+  border-color: rgba(223, 112, 112, .34);
+  color: #efb4b4;
+  background: rgba(94, 34, 34, .16);
+}
+
+.actionButton:disabled,
+.dangerButton:disabled {
+  opacity: .42;
+  cursor: default;
+}
+
+.actionNote {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.checkList {
+  display: grid;
+  gap: 4px;
+  padding: 0 10px 9px;
+}
+
+.checkResult {
+  color: var(--muted);
+  font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.checkPass {
+  color: #9edbb9;
+}
+
+.checkFail {
+  color: #efa9a9;
 }
 
 .composerDock {
@@ -306,7 +415,7 @@
   }
 
   .feed {
-    padding: 22px 16px 145px;
+    padding: 22px 16px 230px;
   }
 
   .turn {
@@ -318,7 +427,8 @@
     padding: 9px 13px;
   }
 
-  .project span {
+  .project span,
+  .shortcut {
     display: none;
   }
 }
