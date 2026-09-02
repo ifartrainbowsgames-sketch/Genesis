@@ -7,10 +7,10 @@ from collections.abc import Iterable
 from sqlalchemy import select
 
 from ..config import settings
-from ..db import SessionLocal
+from ..db import SessionLocal, database_backend
 from ..models import MemoryKnowledge, MemoryRecord
 from ..schemas import MemoryConsolidateResponse, MemoryKnowledgeHit
-from .memory import embed_text
+from .memory import cosine_similarity, embed_text
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +98,27 @@ async def search_knowledge(query: str, scope_id: str | None = None, limit: int =
             stmt = select(MemoryKnowledge).where(MemoryKnowledge.active.is_(True))
             if scope_id:
                 stmt = stmt.where(MemoryKnowledge.scope_id == scope_id)
-            if vector:
+            if vector and database_backend() == "postgresql":
                 distance = MemoryKnowledge.embedding.cosine_distance(vector)
                 stmt = stmt.where(MemoryKnowledge.embedding.is_not(None)).order_by(distance).limit(limit)
-            else:
-                stmt = stmt.where(MemoryKnowledge.content.ilike(f"%{query}%")).order_by(MemoryKnowledge.updated_at.desc()).limit(limit)
+                rows = (await session.execute(stmt)).scalars().all()
+                return [_hit(row) for row in rows]
+            if vector:
+                scan_limit = max(limit, min(settings.local_vector_scan_limit, 5000))
+                local_stmt = (
+                    stmt.where(MemoryKnowledge.embedding.is_not(None))
+                    .order_by(MemoryKnowledge.updated_at.desc())
+                    .limit(scan_limit)
+                )
+                rows = (await session.execute(local_stmt)).scalars().all()
+                ranked = sorted(
+                    ((row, cosine_similarity(row.embedding or [], vector)) for row in rows),
+                    key=lambda item: item[1],
+                    reverse=True,
+                )[:limit]
+                return [_hit(row, score) for row, score in ranked]
+
+            stmt = stmt.where(MemoryKnowledge.content.ilike(f"%{query}%")).order_by(MemoryKnowledge.updated_at.desc()).limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [_hit(row) for row in rows]
     except Exception as exc:
