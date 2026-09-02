@@ -87,6 +87,14 @@ def test_embed_text_rejects_wrong_dimension_from_both_endpoints(
     assert asyncio.run(memory.embed_text("bad dimensions")) is None
 
 
+def test_cosine_similarity_for_embedded_vector_ranking() -> None:
+    assert memory.cosine_similarity([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
+    assert memory.cosine_similarity([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
+    assert memory.cosine_similarity([1.0, 0.0], [-1.0, 0.0]) == pytest.approx(-1.0)
+    assert memory.cosine_similarity([], [1.0]) == -1.0
+    assert memory.cosine_similarity([1.0], [1.0, 0.0]) == -1.0
+
+
 def test_delete_memory_rejects_invalid_uuid_before_database_access() -> None:
     with pytest.raises(ValueError, match="Invalid memory id"):
         asyncio.run(memory.delete_memory("not-a-uuid"))
