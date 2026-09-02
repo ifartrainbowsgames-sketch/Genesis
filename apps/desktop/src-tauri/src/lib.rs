@@ -6,6 +6,7 @@ use tauri_plugin_shell::ShellExt;
 
 mod runtime;
 mod setup;
+mod storage;
 mod verify;
 
 fn starter_workspace(default_workspace: &PathBuf) -> std::io::Result<()> {
@@ -53,6 +54,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             runtime::runtime_info,
+            runtime::runtime_restart,
             setup::setup_status,
             setup::setup_choose_workspace,
             setup::setup_install_ollama,
@@ -67,13 +69,28 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 let app_data = app.path().app_local_data_dir()?;
+                let installer_mode = setup::installer_mode();
+
+                // A restore is staged by the authenticated packaged sidecar, then applied by
+                // Tauri only on the next normal launch before any process opens genesis.db.
+                if !installer_mode {
+                    match storage::apply_pending_restore(&app_data) {
+                        Ok(Some(safety)) => {
+                            println!("[genesis-storage] restore applied; safety backup: {}", safety.display());
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            eprintln!("[genesis-storage] restore not applied: {error}");
+                        }
+                    }
+                }
+
                 let default_workspace = app_data.join("workspace");
                 let database_path = app_data.join("genesis.db");
                 let database_url = sqlite_database_url(&database_path);
                 starter_workspace(&default_workspace)?;
 
                 let config = setup::load_config(app.handle());
-                let installer_mode = setup::installer_mode();
 
                 // Upgrades should not force an already-configured user through setup again.
                 if installer_mode && config.complete {
