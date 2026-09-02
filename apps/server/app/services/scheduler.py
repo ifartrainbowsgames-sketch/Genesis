@@ -9,17 +9,22 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, update
 
 from ..config import settings
-from ..db import SessionLocal
+from ..db import SessionLocal, database_backend
 from ..models import ScheduleRecord
 from ..schemas import ScheduleCreateRequest, ScheduleInfo, TeamRunRequest
 from .team import run_team
 
 logger = logging.getLogger(__name__)
 _scheduler_task: asyncio.Task[None] | None = None
+_schedule_scan_lock = asyncio.Lock()
 
 
 def _decode_request(payload: str) -> TeamRunRequest:
     return TeamRunRequest.model_validate(json.loads(payload))
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
 def _info(row: ScheduleRecord) -> ScheduleInfo:
@@ -29,12 +34,12 @@ def _info(row: ScheduleRecord) -> ScheduleInfo:
         enabled=row.enabled,
         request=_decode_request(row.request_payload),
         interval_seconds=row.interval_seconds,
-        next_run_at=row.next_run_at,
-        last_run_at=row.last_run_at,
+        next_run_at=_as_utc(row.next_run_at),
+        last_run_at=_as_utc(row.last_run_at) if row.last_run_at else None,
         last_task_id=str(row.last_task_id) if row.last_task_id else None,
         last_error=row.last_error,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+        created_at=_as_utc(row.created_at),
+        updated_at=_as_utc(row.updated_at),
     )
 
 
@@ -75,7 +80,7 @@ async def set_schedule_enabled(schedule_id: str, enabled: bool) -> ScheduleInfo 
         if not row:
             return None
         row.enabled = enabled
-        if enabled and row.next_run_at < datetime.now(timezone.utc):
+        if enabled and _as_utc(row.next_run_at) < datetime.now(timezone.utc):
             row.next_run_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(row)
@@ -100,19 +105,25 @@ async def run_due_schedules(limit: int = 5) -> list[str]:
     now = datetime.now(timezone.utc)
     triggered: list[str] = []
     try:
-        async with SessionLocal() as session:
-            stmt = (
-                select(ScheduleRecord)
-                .where(ScheduleRecord.enabled.is_(True), ScheduleRecord.next_run_at <= now)
-                .order_by(ScheduleRecord.next_run_at.asc())
-                .limit(max(1, min(limit, 20)))
-                .with_for_update(skip_locked=True)
-            )
-            rows = (await session.execute(stmt)).scalars().all()
-            # Move next_run_at before executing so a slow run cannot be picked twice.
-            for row in rows:
-                row.next_run_at = now + timedelta(seconds=row.interval_seconds)
-            await session.commit()
+        # SQLite is the installed desktop backend and has one sidecar process.
+        # This lock prevents its scheduler loop and manual run-due endpoint from
+        # claiming the same rows concurrently. PostgreSQL additionally uses
+        # SKIP LOCKED for multi-process/server deployments.
+        async with _schedule_scan_lock:
+            async with SessionLocal() as session:
+                stmt = (
+                    select(ScheduleRecord)
+                    .where(ScheduleRecord.enabled.is_(True), ScheduleRecord.next_run_at <= now)
+                    .order_by(ScheduleRecord.next_run_at.asc())
+                    .limit(max(1, min(limit, 20)))
+                )
+                if database_backend() == "postgresql":
+                    stmt = stmt.with_for_update(skip_locked=True)
+                rows = (await session.execute(stmt)).scalars().all()
+                # Move next_run_at before executing so a slow run cannot be picked twice.
+                for row in rows:
+                    row.next_run_at = now + timedelta(seconds=row.interval_seconds)
+                await session.commit()
 
         for row in rows:
             last_error: str | None = None
