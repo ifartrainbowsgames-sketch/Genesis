@@ -39,6 +39,29 @@ jobs:
       - run: python -m compileall apps/server/app
       - name: Run server tests
         run: python -m pytest -q apps/server/tests
+      - name: Smoke-test embedded SQLite backend
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./build/genesis-ci.db
+        run: |
+          mkdir -p build
+          python - <<'PY'
+          import asyncio
+          from sqlalchemy import select
+          from apps.server.app.db import SessionLocal, database_backend, init_db
+          from apps.server.app.models import MemoryRecord
+
+          async def main():
+              assert database_backend() == "sqlite"
+              await init_db()
+              async with SessionLocal() as session:
+                  session.add(MemoryRecord(conversation_id="ci", role="user", content="embedded database", embedding=[0.0] * 768))
+                  await session.commit()
+                  rows = (await session.execute(select(MemoryRecord))).scalars().all()
+                  assert len(rows) == 1
+                  assert len(rows[0].embedding) == 768
+
+          asyncio.run(main())
+          PY
       - name: Smoke-test MCP imports
         run: |
           python -c "from apps.server.app.tools.mcp_tools import servers; assert servers() == {'servers': []}"
@@ -76,13 +99,19 @@ jobs:
       - name: Build packaged FastAPI sidecar
         shell: pwsh
         run: ./scripts/build-sidecar.ps1 -SkipInstall
-      - name: Launch packaged sidecar and smoke-test desktop API
+      - name: Launch packaged sidecar with embedded database
         shell: pwsh
         run: |
-          $env:DATABASE_URL = "postgresql+asyncpg://genesis:genesis@127.0.0.1:1/genesis"
+          $databasePath = Join-Path $env:RUNNER_TEMP "genesis-desktop-ci.db"
+          $databaseUrlPath = $databasePath.Replace("\", "/")
+          $env:DATABASE_URL = "sqlite+aiosqlite:///$databaseUrlPath"
           $env:SCHEDULER_ENABLED = "false"
           $env:SERVER_HOST = "127.0.0.1"
           $env:WEB_ORIGIN = "http://tauri.localhost"
+          $env:GENESIS_DEFAULT_PROVIDER = "openai"
+          $env:OPENAI_API_KEY = "ci-placeholder-key-not-used-for-network"
+          $env:OLLAMA_BASE_URL = "http://127.0.0.1:1"
+          $env:SEARXNG_URL = ""
           $process = Start-Process -FilePath "./build/sidecar/genesis-server.exe" -PassThru
           try {
             $ready = $false
@@ -98,6 +127,15 @@ jobs:
             }
             if (-not $ready) { throw "Packaged Genesis sidecar did not become healthy" }
 
+            $system = Invoke-RestMethod -Uri "http://127.0.0.1:8000/v1/system/health" -TimeoutSec 10
+            if ($system.status -ne "ready") { throw "Packaged Genesis system health was $($system.status)" }
+            if ($system.components.database.status -ne "ready") { throw "Embedded database was not ready" }
+            if ($system.components.database.backend -ne "sqlite") { throw "Desktop sidecar did not use SQLite" }
+            if ($system.components.ai_provider.provider -ne "openai") { throw "Selected provider health was not respected" }
+            if (-not (Test-Path $databasePath)) { throw "Embedded SQLite database file was not created" }
+
+            Invoke-RestMethod -Uri "http://127.0.0.1:8000/v1/tasks" -TimeoutSec 5 | Out-Null
+
             $preflight = Invoke-WebRequest `
               -Uri "http://127.0.0.1:8000/health" `
               -Method Options `
@@ -109,7 +147,7 @@ jobs:
             if ($preflight.Headers["Access-Control-Allow-Origin"] -ne "http://tauri.localhost") {
               throw "Packaged sidecar did not allow the Tauri production origin"
             }
-            Write-Host "Packaged desktop API health and CORS checks passed."
+            Write-Host "Packaged desktop API, embedded SQLite, provider health, and CORS checks passed."
           } finally {
             if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
           }
