@@ -32,9 +32,36 @@ The built-in project runner exposes only fixed check families:
 - Cargo check
 - Cargo tests
 
-Commands launch with `shell=False` and a workspace-bounded working directory.
+Commands launch without a shell and with a workspace-bounded working directory. The Workbench xterm component is output-only and has stdin disabled.
 
-The Workbench xterm component is output-only and has stdin disabled. It is not a terminal authority surface.
+### Phase 9 installer / first-run setup
+
+The Windows installer owns first-run AI configuration. This setup bridge is intentionally narrower than Genesis's normal tool system.
+
+Local Ollama setup:
+
+- Existing Ollama installations are detected before any install action.
+- Preferred installation uses fixed `winget install` arguments for the exact `Ollama.Ollama` package.
+- If winget is unavailable or fails, Genesis downloads `OllamaSetup.exe` only from the fixed official `https://ollama.com/download/OllamaSetup.exe` endpoint.
+- The fallback executable must report a valid Windows Authenticode signature before Genesis executes it.
+- Fallback silent installer arguments are fixed by Genesis and contain no model/user text.
+- Model names are character/length validated before they are passed as a single `ollama pull` argument.
+- Genesis starts Ollama using a fixed `serve` argument rather than interpolating a shell command.
+
+Cloud setup:
+
+- OpenAI and Anthropic keys are validated against the configured provider before setup is marked complete.
+- API keys are stored through the operating-system credential store.
+- `setup.json` contains only non-secret completion/provider/model state.
+- The packaged sidecar receives a stored key only through its process environment.
+- Setup UI never writes a cloud API key into the repository or normal application configuration.
+
+Installer behavior:
+
+- Interactive NSIS installs wait for Genesis Setup before completing.
+- Silent installs do not launch an interactive wizard.
+- Existing configured upgrades do not force the setup wizard again.
+- An incomplete first launch remains setup-gated; the Workbench is not treated as ready until configuration and local sidecar health succeed.
 
 ### External workers
 
@@ -81,19 +108,17 @@ Evolution V1 is shadow-first.
 
 ## Secrets
 
-Do not commit `.env` or provider tokens. Use restricted credentials wherever possible:
-
-- fine-grained GitHub tokens scoped to required repositories/permissions
-- dedicated environment variables for external worker tokens
-- local-only endpoints for local MCP/worker services when remote exposure is unnecessary
+Do not commit `.env` or provider tokens. Use restricted credentials wherever possible. Packaged desktop cloud keys use the OS credential store; developer/source mode may still use environment variables or `.env` files that must remain uncommitted.
 
 ## Network exposure
 
-The default development API host is configurable. If Genesis is exposed beyond localhost or a trusted LAN, add an authentication/reverse-proxy layer before treating it as multi-user software. The current approval broker assumes the person using the Genesis UI is the authority granting approvals.
+The default API host is loopback-only (`127.0.0.1`). Deliberately exposing Genesis beyond localhost changes its threat model. Add an authentication/reverse-proxy layer before treating it as multi-user software; the approval broker assumes the person using the local Genesis UI is the authority granting approvals.
 
 ## Desktop signing
 
 A release is not considered Authenticode-signed merely because CI produced a Windows installer. Genuine signing requires a real certificate/signing identity supplied to the release environment.
+
+The Phase 9 Ollama fallback signature verification protects the downloaded **Ollama** installer; it does not sign the **Genesis** installer itself.
 
 ## Reporting vulnerabilities
 
