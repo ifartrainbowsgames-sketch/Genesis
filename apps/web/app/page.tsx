@@ -226,7 +226,10 @@ export default function WorkbenchHome() {
     }
 
     setTurns([...history, { role: "assistant", content: "", meta: "streaming", context: contextFiles }]);
-    const messages = history.map(({ role, content }) => ({ role, content }));
+    const messages: { role: "system" | "user" | "assistant"; content: string }[] = history.map(({ role, content }) => ({
+      role,
+      content,
+    }));
     if (projectContext && contextFiles.length) {
       messages.unshift({
         role: "system",

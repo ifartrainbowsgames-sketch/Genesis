@@ -88,7 +88,7 @@ async fn tags() -> Result<Vec<String>, String> {
         .json::<TagsResponse>()
         .await
         .map_err(|error| format!("Could not read Ollama model list: {error}"))?;
-    let mut names = Vec::new();
+    let mut names: Vec<String> = Vec::new();
     for item in payload.models {
         if !names.iter().any(|name| name.eq_ignore_ascii_case(&item.name)) {
             names.push(item.name);
