@@ -54,6 +54,7 @@ from .schemas import (
 from .services.agent import make_plan
 from .services.approvals import approvals
 from .services.builder import make_changes
+from .services.catalog import list_catalog
 from .services.evolution import list_candidates, promote_candidate, run_evolution
 from .services.llm_router import LLMError, router
 from .services.memory import clear_memory, delete_memory, recent_memory, remember, search_memory
@@ -344,6 +345,14 @@ async def workers_run(request: WorkerRunRequest) -> WorkerRunResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (RuntimeError, ValueError, FileNotFoundError, httpx.HTTPError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/v1/catalog")
+async def catalog() -> dict:
+    try:
+        return await list_catalog()
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/v1/schedules", response_model=list[ScheduleInfo])

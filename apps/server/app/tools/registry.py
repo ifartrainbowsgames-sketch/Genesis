@@ -4,6 +4,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from ..services.catalog import install_app as catalog_install
+from ..services.catalog import launch_app as catalog_launch
+from ..services.catalog import list_catalog as catalog_list
+from ..services.catalog import uninstall_app as catalog_uninstall
 from ..services.workers import run_external_worker_tool
 from .git_tools import diff as git_diff
 from .git_tools import status as git_status
@@ -51,6 +55,10 @@ TOOLS: dict[str, ToolSpec] = {
     "project.detect_checks": ToolSpec(detect_checks, "Detect supported project checks", False),
     "project.run_check": ToolSpec(run_check, "Run a restricted build/test check", True),
     "worker.run": ToolSpec(run_external_worker_tool, "Run an explicitly allowlisted external worker", True),
+    "catalog.list": ToolSpec(catalog_list, "List local app-catalog entries and install state", False),
+    "catalog.install": ToolSpec(catalog_install, "Install an approved catalog entry via winget/Ollama", True),
+    "catalog.launch": ToolSpec(catalog_launch, "Launch an installed catalog entry", True),
+    "catalog.uninstall": ToolSpec(catalog_uninstall, "Uninstall a catalog entry", True),
 }
 
 

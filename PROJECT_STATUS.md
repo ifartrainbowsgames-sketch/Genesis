@@ -134,32 +134,36 @@ Those tests are intentionally not fabricated: they require expensive external do
 - Evolution candidates never auto-promote.
 - Cloud providers remain optional.
 
-## Phase 9 — local app catalog/launcher: RESEARCH COMPLETE, NOT STARTED
+## Phase 9 — local app catalog/launcher: 9A PIPELINE PROVEN
 
-Feasibility research is done (`docs/APP_CATALOG_FEASIBILITY.md`); design direction is summarized in `docs/ARCHITECTURE.md`. No implementation has begun. Planned sequencing, narrowest first:
+Feasibility research is done (`docs/APP_CATALOG_FEASIBILITY.md`); design direction is summarized in `docs/ARCHITECTURE.md`. Phase 9A's install/approval pipeline is implemented and tested end-to-end (server-side); the Next.js `/apps` catalog page is live. Phase 9B/9C are not started.
 
-### Phase 9A — pipeline proof (planned)
+**Implementation note — deviation from the original design sketch:** install/launch/uninstall execute server-side in FastAPI (`app/services/catalog.py`), using the same fixed-argv `asyncio.create_subprocess_exec` (`shell=False`) pattern already used for external command workers and project checks, registered as ordinary approval-gated tools (`catalog.install`/`catalog.launch`/`catalog.uninstall`/`catalog.list`) — not as new Tauri/Rust commands. This keeps one execution/approval model across the whole app instead of introducing a second one, at the cost of not yet getting Tauri's ACL as a second, structural enforcement layer. Moving privileged execution into scoped Tauri commands remains a valid future hardening step (tracked below), not a blocker for the MVP. Similarly, install-state/transaction tracking uses the existing PostgreSQL database (`CatalogInstallation`, `CatalogTransaction` tables in `app/models.py`) rather than a separate local SQLite store, for the same one-datastore-not-two reason; it still gets the same graceful-degradation behavior as every other Genesis table (works, just without persistence, when PostgreSQL is unavailable).
 
-- [ ] Manifest schema (identity/version/source/checksum/install-uninstall-launch/license tier/permissions) — hybrid of WinGet+Scoop+Flatpak fields
-- [ ] SQLite `installed_apps` + `install_transactions` tables with stage → checksum-verify → commit → rollback
-- [ ] Approval token scoped to `(app_id, version, manifest_hash)`
-- [ ] Tauri 2 capability/scope design: narrow Rust commands per install-action class, no generic shell passthrough
-- [ ] MVP catalog limited to Ollama-compatible models (via Ollama's own registry) plus 2-3 MIT/Apache-licensed terminal emulators
+### Phase 9A — pipeline proof
+
+- [x] Manifest schema (identity/version/source/install/uninstall/launch/license tier/platform) — `CatalogManifest` in `app/schemas.py`; no checksum field yet since winget/Ollama each verify their own downloads (see 9B)
+- [x] Install-state/transaction tracking with stage → commit/rollback (PostgreSQL tables, not SQLite — see deviation note above)
+- [x] Approval token scoped to `(app_id, version, manifest_hash)` — generic approval-broker arguments carry `manifest_hash`; `install_app`/`launch_app` reject a stale hash
+- [ ] Tauri 2 capability/scope design: narrow Rust commands per install-action class (deferred — see deviation note above)
+- [x] MVP catalog: 2 terminals (Windows Terminal, Alacritty via winget) + 2 Ollama models (`apps/server/catalog/index.json`)
+- [x] `/apps` catalog UI (Next.js) — browse, install, launch, uninstall with approval confirmation
 
 ### Phase 9B — hardening before catalog growth (planned)
 
-- [ ] Freshness delay on new/updated catalog entries before they become installable
+- [x] Freshness delay on new/updated catalog entries before they become installable (`catalog_freshness_hours`, default 72h)
 - [ ] Scheduled CI job validating catalog URLs/checksums, bot-filed PRs on drift (never auto-merged)
-- [ ] Security audit of manifest-parsing/extraction path specifically (path traversal / ZipSlip class bugs)
-- [ ] Per-entry license tier + per-model weight license tag enforced in the manifest schema
+- [ ] Security audit of manifest-parsing path specifically (lower risk than the original archive-extraction concern since entries are plain JSON validated by Pydantic, not executable scripts — still worth a dedicated pass before catalog growth)
+- [x] Per-entry `license_tier` field enforced in the manifest schema; per-model weight license detail currently lives in free-text `license_note` rather than a separate structured tag — worth splitting out before adding more model entries
 
-### Phase 9C — catalog widening (not started, sequenced after 9A/9B prove out)
+### Phase 9C — catalog widening (not started, sequenced after 9B closes out)
 
-- [ ] Native package manager wrapping (winget/brew/apt/flatpak) before any custom fetch-and-run engine
+- [x] Native package manager wrapping (winget) for the seed Windows entries — no custom fetch-and-run engine was built
+- [ ] apt/brew/flatpak wrapping for Linux parity (seed catalog currently only installs terminals on Windows; Alacritty's Linux platform tag is declared but not yet wired to an installer)
 - [ ] Vendor hand-off flow for proprietary IDEs (VS Code, Cursor via fetch-and-handoff; JetBrains via their own Toolbox CLI) — never bundled/redistributed
 - [ ] Vision/image-to-text model category
 - [ ] Optional sandboxing tier (bubblewrap on Linux, Windows Sandbox config on Windows) per catalog entry
-- [ ] Community-submitted manifests gated by the same approval + automated audit CI as built-in entries
+- [ ] Community-submitted manifests (e.g. a winget-pkgs-style third-party feed) gated by the same approval + automated audit CI as built-in entries
 
 ## Final release condition
 

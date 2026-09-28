@@ -300,6 +300,39 @@ class WorkerRunResponse(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+CatalogInstallType = Literal["winget", "ollama_pull"]
+CatalogLicenseTier = Literal["bundle", "auto_install", "handoff", "avoid"]
+
+
+class CatalogManifest(BaseModel):
+    app_id: str
+    name: str
+    category: str
+    version: str
+    platform: list[Literal["windows", "linux"]]
+    install_type: CatalogInstallType
+    source: dict[str, Any]
+    launch_command: list[str] | None = None
+    uninstall_command: list[str] | None = None
+    license_tier: CatalogLicenseTier
+    license_note: str = ""
+    published_at: datetime
+
+
+class CatalogEntry(BaseModel):
+    manifest: CatalogManifest
+    manifest_hash: str
+    installed: bool
+    installed_version: str | None = None
+    status: str | None = None
+
+
+class CatalogActionResult(BaseModel):
+    app_id: str
+    status: str
+    detail: str = ""
+
+
 class ScheduleCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=240)
     request: TeamRunRequest

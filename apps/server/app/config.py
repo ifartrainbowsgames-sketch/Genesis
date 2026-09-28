@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     evolution_max_variants: int = 3
     evolution_max_cases: int = 10
 
+    # Local app catalog/launcher (Phase 9). Entries install via winget or Ollama's own
+    # pull mechanism only; no arbitrary scripting. New/updated entries are blocked from
+    # install until catalog_freshness_hours has passed since their published_at.
+    catalog_freshness_hours: int = 72
+    catalog_install_timeout_seconds: int = 600
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../../.env", "../../../.env"),
         env_file_encoding="utf-8",

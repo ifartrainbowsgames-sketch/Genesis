@@ -8,7 +8,7 @@ Genesis intentionally **does not self-deploy, self-copy, expose an unrestricted 
 
 ### Long-term direction
 
-Genesis's end goal is a local-first "app store"/launcher for AI and coding tools: a categorized catalog (editors, terminals, local LLM/vision runtimes, other open-source AI tools) where each entry is one-click downloaded, installed, and launched, fully local. The workstation described below is the first catalog entry, not the final product shape. This is **planned, research-complete, not-yet-implemented** work — see `docs/APP_CATALOG_FEASIBILITY.md` for the feasibility research, `docs/ARCHITECTURE.md` for the planned design, and `PROJECT_STATUS.md` (Phase 9) for sequencing.
+Genesis's end goal is a local-first "app store"/launcher for AI and coding tools: a categorized catalog (editors, terminals, local LLM/vision runtimes, other open-source AI tools) where each entry is one-click downloaded, installed, and launched, fully local. The workstation described below is the first catalog entry, not the final product shape. The pipeline proof (Phase 9A: manifest schema, approval-gated install/launch, a seed catalog of terminals + Ollama models, the `/apps` page) is implemented — see `docs/APP_CATALOG_FEASIBILITY.md` for the feasibility research, `docs/ARCHITECTURE.md` for the design, and `PROJECT_STATUS.md` (Phase 9) for what's built vs. still planned.
 
 ## What works now
 
@@ -21,6 +21,7 @@ Genesis's end goal is a local-first "app store"/launcher for AI and coding tools
 - Persistent task ledger, immutable request artifacts, ordered run events, and retries
 - Durable bounded interval schedules
 - Workbench with filtered Explorer, Monaco editor, Git diff/status, tasks/workers, and output-only xterm
+- App catalog (`/apps`) with approval-gated one-click install/launch/uninstall for a seed set of terminals (via winget) and Ollama models (via `ollama pull`)
 - Approval-gated local writes, fixed project checks, GitHub writes, MCP calls, and external workers
 - Fixed-argv command worker adapter (`shell=False`) and allowlisted HTTP worker adapter
 - Repository selector restricted to configured roots
@@ -67,6 +68,7 @@ Open:
 
 - Workstation: `http://localhost:3000`
 - Workbench: `http://localhost:3000/workbench`
+- Apps: `http://localhost:3000/apps`
 - Runtime: `http://localhost:3000/runtime`
 - Memory: `http://localhost:3000/memory`
 - Evolution: `http://localhost:3000/evolution`
@@ -101,7 +103,18 @@ The Workbench Explorer also skips `.git`, `node_modules`, `.next`, virtual envir
 - xterm is **output-only** (`stdin` disabled); it displays restricted check output and is not a shell.
 - Git status/diff is read-only and degrades gracefully when the selected workspace is not a Git repository.
 
-## 5. Durable runtime
+## 5. App catalog
+
+`/apps` is the one-click local install/launch catalog (Phase 9A of the long-term direction above):
+
+- Catalog entries are declarative manifests only (`apps/server/catalog/index.json`) — never scripts. Two install types exist: `winget` (Windows terminals) and `ollama_pull` (local models via Ollama's own registry).
+- Install, launch, and uninstall are ordinary approval-gated tools (`catalog.install`/`catalog.launch`/`catalog.uninstall`), proposed and confirmed exactly like a Workbench save.
+- Install and launch additionally re-check a `manifest_hash` at execution time; if the catalog entry changed since you approved it, the action is rejected rather than silently running the new version.
+- New or updated catalog entries are blocked from install for `catalog_freshness_hours` (default 72h) after publication.
+- Seed catalog: Windows Terminal and Alacritty (via `winget`), plus the `qwen3:8b` and `nomic-embed-text` Ollama models.
+- Proprietary IDEs (VS Code, Cursor, JetBrains) are intentionally not in the catalog yet — see `PROJECT_STATUS.md` Phase 9C for the planned vendor-hand-off approach, which never bundles or silently redistributes them.
+
+## 6. Durable runtime
 
 `/runtime` exposes the persistent operating layer.
 
@@ -119,7 +132,7 @@ A retry reconstructs the original request artifact and records `retry_of` lineag
 
 Durable schedules are stored in PostgreSQL. Due rows are claimed with `FOR UPDATE SKIP LOCKED`; `next_run_at` advances before execution so a slow run is not picked up twice. Scheduled runs use the same bounded team and still stop before workspace mutation.
 
-## 6. External workers
+## 7. External workers
 
 External runtimes are optional and **server-side allowlisted** through `EXTERNAL_WORKERS_JSON`.
 
@@ -141,7 +154,7 @@ The direct `/v1/workers/run` endpoint accepts the built-in `genesis-team` only. 
 
 This generic adapter can wrap products such as Claude Code, Codex, OpenHands, Wayland, or another local worker when you explicitly configure a compatible fixed command or HTTP bridge. Genesis does not auto-discover arbitrary executables.
 
-## 7. Cognitive memory
+## 8. Cognitive memory
 
 Genesis keeps raw episodic `MemoryRecord` rows unchanged and stores consolidated knowledge in a separate `MemoryKnowledge` table.
 
@@ -155,7 +168,7 @@ The V1 consolidator creates:
 
 `/memory` shows episodic and cognitive layers separately, supports search, and lets the user trigger consolidation. Chat retrieval can use both layers. Consolidation does not delete the source episodes.
 
-## 8. Shadow evolution
+## 9. Shadow evolution
 
 `/evolution` implements bounded prompt evolution rather than live self-modification.
 
@@ -170,7 +183,7 @@ Each experiment:
 
 A candidate can be promoted only after explicit user confirmation **and** only when every deterministic case passed and its score met or beat baseline. There is no automatic promotion or code rewrite. An older passing candidate can be promoted again, providing a manual rollback path.
 
-## 9. Source-tracked research
+## 10. Source-tracked research
 
 Start the bundled SearXNG broker:
 
@@ -180,7 +193,7 @@ docker compose up -d searxng
 
 The Researcher receives bounded result titles, URLs, and snippets and produces a synthesis with source IDs such as `[S1]`. A standalone research run is stored as a task artifact, and a team run can use the same source-tracked artifact as Builder context.
 
-## 10. Local voice
+## 11. Local voice
 
 Genesis does not send microphone audio to a cloud speech service by default. The browser records mono audio, converts it to 16 kHz PCM WAV, and sends it to FastAPI. The backend invokes only the configured whisper.cpp binary/model with a fixed transcription argument set.
 
@@ -191,7 +204,7 @@ WHISPER_CPP_MODEL=C:/Tools/whisper.cpp/models/ggml-base.en.bin
 
 The transcript is inspectable/editable before sending it to chat. Spoken replies use browser/OS speech synthesis and can be disabled.
 
-## 11. GitHub and MCP
+## 12. GitHub and MCP
 
 GitHub:
 
@@ -210,7 +223,7 @@ MCP_SERVERS_JSON=[{"name":"local-tools","url":"http://127.0.0.1:9000/mcp","enabl
 
 Genesis connects only to explicitly configured Streamable HTTP endpoints. `mcp.call_tool` is treated as side-effect-capable and goes through approval.
 
-## 12. Desktop application
+## 13. Desktop application
 
 Development with packaged FastAPI sidecar:
 

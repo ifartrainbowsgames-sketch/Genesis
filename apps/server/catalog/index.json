@@ -1,0 +1,60 @@
+{
+  "entries": [
+    {
+      "app_id": "windows-terminal",
+      "name": "Windows Terminal",
+      "category": "terminal",
+      "version": "1.21.10351.0",
+      "platform": ["windows"],
+      "install_type": "winget",
+      "source": { "winget_id": "Microsoft.WindowsTerminal" },
+      "launch_command": ["wt"],
+      "uninstall_command": null,
+      "license_tier": "bundle",
+      "license_note": "MIT licensed (microsoft/terminal). Installed via winget from Microsoft's own package feed; Genesis does not redistribute the binary.",
+      "published_at": "2024-01-01T00:00:00Z"
+    },
+    {
+      "app_id": "alacritty",
+      "name": "Alacritty",
+      "category": "terminal",
+      "version": "0.13.2",
+      "platform": ["windows", "linux"],
+      "install_type": "winget",
+      "source": { "winget_id": "Alacritty.Alacritty" },
+      "launch_command": ["alacritty"],
+      "uninstall_command": null,
+      "license_tier": "bundle",
+      "license_note": "Dual Apache-2.0/MIT licensed. Installed via winget on Windows; use your distro's package manager on Linux until Phase 9C adds apt/flatpak wrapping.",
+      "published_at": "2024-01-01T00:00:00Z"
+    },
+    {
+      "app_id": "ollama-qwen3-8b",
+      "name": "Qwen3 8B (Ollama)",
+      "category": "local-llm",
+      "version": "qwen3:8b",
+      "platform": ["windows", "linux"],
+      "install_type": "ollama_pull",
+      "source": { "model": "qwen3:8b" },
+      "launch_command": null,
+      "uninstall_command": null,
+      "license_tier": "auto_install",
+      "license_note": "Pulled from Ollama's own model registry at install time; Genesis does not re-host weights. Check the model's upstream license before use.",
+      "published_at": "2024-01-01T00:00:00Z"
+    },
+    {
+      "app_id": "ollama-nomic-embed-text",
+      "name": "Nomic Embed Text (Ollama)",
+      "category": "local-llm",
+      "version": "nomic-embed-text",
+      "platform": ["windows", "linux"],
+      "install_type": "ollama_pull",
+      "source": { "model": "nomic-embed-text" },
+      "launch_command": null,
+      "uninstall_command": null,
+      "license_tier": "auto_install",
+      "license_note": "Pulled from Ollama's own model registry at install time; Genesis does not re-host weights. Apache-2.0 upstream.",
+      "published_at": "2024-01-01T00:00:00Z"
+    }
+  ]
+}
