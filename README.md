@@ -6,6 +6,10 @@ Genesis 0.9 adds the real Workbench and durable operating layer: Monaco editing,
 
 Genesis intentionally **does not self-deploy, self-copy, expose an unrestricted shell, auto-apply generated code, or auto-promote evolved behavior**.
 
+### Long-term direction
+
+Genesis's end goal is a local-first "app store"/launcher for AI and coding tools: a categorized catalog (editors, terminals, local LLM/vision runtimes, other open-source AI tools) where each entry is one-click downloaded, installed, and launched, fully local. The workstation described below is the first catalog entry, not the final product shape. This is **planned, research-complete, not-yet-implemented** work — see `docs/APP_CATALOG_FEASIBILITY.md` for the feasibility research, `docs/ARCHITECTURE.md` for the planned design, and `PROJECT_STATUS.md` (Phase 9) for sequencing.
+
 ## What works now
 
 - FastAPI backend

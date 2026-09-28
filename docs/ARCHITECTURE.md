@@ -180,6 +180,24 @@ A produced installer is not represented as Authenticode-signed unless a real sig
 
 `/diagnostics` reports database, Ollama, research, voice, GitHub, MCP, worker registry, scheduler, cognitive memory, and evolution state without returning secret values.
 
+## Planned: local app catalog / launcher
+
+This section describes the **planned** design for turning Genesis into a one-click local catalog/launcher for AI and dev tools (code editors, terminals, local LLM/vision runtimes). Nothing here is implemented yet — see `PROJECT_STATUS.md` Phase 9 for sequencing and `docs/APP_CATALOG_FEASIBILITY.md` for the supporting research and citations. The design intentionally reuses Genesis's existing approval/scoping architecture rather than introducing a separate trust model.
+
+**Manifest.** Each catalog entry is a declarative manifest, never an executable script: identity, semver, source URL(s), SHA-256 checksum, install/uninstall/launch commands, platform gating, a license tier (bundle / auto-fetch-and-install / fetch-and-handoff / avoid), and — for models — a weight license tag independent of runtime license. No manifest field grants arbitrary shell access.
+
+**Install-state tracking.** A local SQLite `installed_apps` table (app_id, version, install_path, checksum, status) plus an `install_transactions` table (transaction_id, app_id, phase, error_detail). Installs go stage → checksum-verify → commit, with deterministic reverse-order rollback on failure. This is additive to the PostgreSQL-backed durable runtime, not a replacement — install state is local-machine state, not synced/shared state.
+
+**Approval boundary.** Install and launch are both mutating actions and go through the same propose → approve → execute broker as other tools, except the approval token is scoped to `(app_id, version, manifest_hash)` rather than just `app_id`, so a catalog update carrying new permissions never silently inherits an old approval.
+
+**Execution split.** Privileged operations (download, checksum-verify, extract, launch, install-state writes) live in narrowly-scoped Rust/Tauri commands under Tauri 2's default-deny capabilities/permissions/scopes model — one scoped command per install-action class, never a generic shell passthrough. FastAPI keeps its existing role: catalog-index fetching, manifest schema validation, semver-diff, and approval-token issuance/audit logging. Next.js calls FastAPI for planning data and Tauri's `invoke` only for already-approved execution. This gives the approval boundary two independent enforcement points (FastAPI logic and the Tauri IPC/ACL boundary).
+
+**Packaging strategy.** Wrap native OS package managers (`winget`, `apt`, `brew`, `flatpak`) wherever a tool is already cataloged there — this inherits their checksum/signature verification and, on Windows, SmartScreen reputation. A custom fetch/verify/launch path (one scoped Tauri command, approval-gated) is reserved for the long tail not covered by any native manager.
+
+**Sandboxing.** Tier 0 (default): installed apps run as ordinary user processes scoped to a workspace-local install directory. Opt-in per entry beyond that: `bwrap` on Linux, a generated Windows Sandbox `.wsb` config on Windows. No custom container/namespace runtime is in scope.
+
+**MVP sequencing.** Start with one axis — Ollama-compatible models (via Ollama's own registry, not re-hosted by Genesis) plus 2-3 MIT/Apache-licensed terminal emulators — and prove the transactional install/approval pipeline before widening to IDEs (vendor hand-off only, never bundled) or vision models.
+
 ## Database compatibility
 
 Genesis 0.9 adds new tables (`memory_knowledge`, `run_events`, `schedule_records`, `evolution_candidates`, `evolution_eval_runs`) instead of modifying columns on existing Phase-5A tables. This keeps `Base.metadata.create_all()` safe for the 0.9 upgrade path. A formal migration framework should be introduced before future releases need destructive/column-changing schema migrations.

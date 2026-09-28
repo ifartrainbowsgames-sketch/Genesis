@@ -2,6 +2,8 @@
 
 Genesis 0.9 preserves the roadmap explicitly as **5A → 5B → 5C → 6 → 7 → 8**. Earlier foundation/integration/team work remains complete; this file focuses on the convergence roadmap.
 
+The long-term direction beyond 0.9 is **Phase 9 — local app catalog/launcher** (see below): turning Genesis into a one-click local install/launch catalog for AI and dev tooling, with the current Workbench/Runtime/Memory/Evolution workstation becoming one catalog entry among others rather than the whole product. Phase 9 is in the research/planning stage; nothing in it is implemented yet.
+
 ## Phase 5A — reliability foundation: DONE / MERGED
 
 - [x] Real pytest suite instead of import-only confidence
@@ -131,6 +133,33 @@ Those tests are intentionally not fabricated: they require expensive external do
 - Team runs and schedules are bounded and stop before applying workspace mutations.
 - Evolution candidates never auto-promote.
 - Cloud providers remain optional.
+
+## Phase 9 — local app catalog/launcher: RESEARCH COMPLETE, NOT STARTED
+
+Feasibility research is done (`docs/APP_CATALOG_FEASIBILITY.md`); design direction is summarized in `docs/ARCHITECTURE.md`. No implementation has begun. Planned sequencing, narrowest first:
+
+### Phase 9A — pipeline proof (planned)
+
+- [ ] Manifest schema (identity/version/source/checksum/install-uninstall-launch/license tier/permissions) — hybrid of WinGet+Scoop+Flatpak fields
+- [ ] SQLite `installed_apps` + `install_transactions` tables with stage → checksum-verify → commit → rollback
+- [ ] Approval token scoped to `(app_id, version, manifest_hash)`
+- [ ] Tauri 2 capability/scope design: narrow Rust commands per install-action class, no generic shell passthrough
+- [ ] MVP catalog limited to Ollama-compatible models (via Ollama's own registry) plus 2-3 MIT/Apache-licensed terminal emulators
+
+### Phase 9B — hardening before catalog growth (planned)
+
+- [ ] Freshness delay on new/updated catalog entries before they become installable
+- [ ] Scheduled CI job validating catalog URLs/checksums, bot-filed PRs on drift (never auto-merged)
+- [ ] Security audit of manifest-parsing/extraction path specifically (path traversal / ZipSlip class bugs)
+- [ ] Per-entry license tier + per-model weight license tag enforced in the manifest schema
+
+### Phase 9C — catalog widening (not started, sequenced after 9A/9B prove out)
+
+- [ ] Native package manager wrapping (winget/brew/apt/flatpak) before any custom fetch-and-run engine
+- [ ] Vendor hand-off flow for proprietary IDEs (VS Code, Cursor via fetch-and-handoff; JetBrains via their own Toolbox CLI) — never bundled/redistributed
+- [ ] Vision/image-to-text model category
+- [ ] Optional sandboxing tier (bubblewrap on Linux, Windows Sandbox config on Windows) per catalog entry
+- [ ] Community-submitted manifests gated by the same approval + automated audit CI as built-in entries
 
 ## Final release condition
 
